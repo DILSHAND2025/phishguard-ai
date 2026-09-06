@@ -161,48 +161,135 @@ const server = http.createServer(async (req, res) => {
   // GeoIP endpoint
   if (pathname === '/api/geoip') {
     const ip = parsedUrl.query.ip;
-    if (!ip) return sendJson(res, 400, { error: 'Missing ip parameter' });
+    if (!ip) return sendJson(res, 400, { error: 'Missing ip parameter', status: 'INVALID_INPUT' });
 
-    const cacheKey = `geo:${ip}`;
+    // Validate IP format
+    const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const isIPv4 = ipv4Regex.test(ip.trim());
+    const isIPv6 = ip.includes(':');
+    if (!isIPv4 && !isIPv6) {
+      return sendJson(res, 400, { ip, status: 'INVALID_IP', error: 'Invalid IP address format' });
+    }
+
+    // Check private / reserved IP
+    const cleanIP = ip.trim().toLowerCase();
+    if (
+      cleanIP.startsWith('10.') || cleanIP.startsWith('127.') || cleanIP.startsWith('0.') ||
+      cleanIP.startsWith('192.168.') || cleanIP.startsWith('169.254.') || cleanIP.startsWith('100.64.') ||
+      cleanIP === '255.255.255.255' || cleanIP === '::1' || cleanIP === '::' || cleanIP.startsWith('fe80:') || cleanIP.startsWith('fc00:')
+    ) {
+      return sendJson(res, 200, {
+        ip: cleanIP,
+        status: 'PRIVATE_IP',
+        isPrivate: true,
+        error: 'Private/reserved non-routable IP address',
+        country: 'Private / Reserved Network',
+        countryCode: 'LAN',
+        city: 'Local Area Network',
+        latitude: null,
+        longitude: null,
+        isp: 'Private Infrastructure',
+        asn: 'N/A'
+      });
+    }
+
+    const cacheKey = `geo:${cleanIP}`;
     if (CACHE.has(cacheKey)) {
       return sendJson(res, 200, CACHE.get(cacheKey));
     }
 
+    // 1. Try ipwho.is (HTTPS, fast, zero auth required)
     try {
-      const liveData = await fetchExternalJson(`https://ip-api.com/json/${ip}?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as`);
-      if (liveData && liveData.status === 'success') {
-        const asnParts = (liveData.as || '').split(' ');
-        const geoRecord = {
-          ip,
-          country: liveData.country || 'Unknown Country',
-          countryCode: liveData.countryCode || 'UN',
-          region: liveData.regionName || '',
-          city: liveData.city || '',
-          latitude: liveData.lat || 0,
-          longitude: liveData.lon || 0,
-          asn: asnParts[0] || 'Unknown ASN',
-          asnOrg: liveData.org || liveData.isp || 'Unknown Organization',
-          isp: liveData.isp || 'Unknown ISP',
-          networkType: 'Standard Transit Network',
-          riskLevel: 'LOW',
-          isProxyOrVpn: false,
-          routingDetails: `Live IP-API Resolution | ${liveData.as || ''}`
-        };
-        CACHE.set(cacheKey, geoRecord);
-        return sendJson(res, 200, geoRecord);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2800);
+      const resp = await fetch(`https://ipwho.is/${encodeURIComponent(cleanIP)}`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const live = await resp.json();
+        if (live && live.success !== false && live.country) {
+          const geoRecord = {
+            ip: cleanIP,
+            status: 'SUCCESS',
+            country: live.country || 'Unknown Country',
+            countryCode: live.country_code || live.countryCode || '',
+            region: live.region || live.regionName || '',
+            city: live.city || '',
+            latitude: typeof live.latitude === 'number' ? live.latitude : null,
+            longitude: typeof live.longitude === 'number' ? live.longitude : null,
+            timezone: live.timezone?.id || live.timezone || '',
+            asn: live.connection?.asn ? `AS${live.connection.asn}` : 'Unknown ASN',
+            asnOrg: live.connection?.org || live.connection?.isp || '',
+            isp: live.connection?.isp || live.connection?.org || '',
+            networkType: 'Commercial Transit Network',
+            riskLevel: 'LOW',
+            isProxyOrVpn: false,
+            routingDetails: live.connection?.asn ? `BGP ASN: AS${live.connection.asn} (${live.connection.isp || ''})` : ''
+          };
+          CACHE.set(cacheKey, geoRecord);
+          return sendJson(res, 200, geoRecord);
+        }
       }
     } catch {
-      // ignore
+      // Fallback to ip-api
     }
 
+    // 2. Fallback to ip-api.com over HTTP
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const resp = await fetch(`http://ip-api.com/json/${encodeURIComponent(cleanIP)}?fields=status,country,countryCode,regionName,city,lat,lon,timezone,isp,org,as`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const live = await resp.json();
+        if (live && live.status === 'success') {
+          const asnParts = (live.as || '').split(' ');
+          const geoRecord = {
+            ip: cleanIP,
+            status: 'SUCCESS',
+            country: live.country || 'Unknown Country',
+            countryCode: live.countryCode || '',
+            region: live.regionName || '',
+            city: live.city || '',
+            latitude: typeof live.lat === 'number' ? live.lat : null,
+            longitude: typeof live.lon === 'number' ? live.lon : null,
+            timezone: live.timezone || '',
+            asn: asnParts[0] || 'Unknown ASN',
+            asnOrg: live.org || live.isp || '',
+            isp: live.isp || live.org || '',
+            networkType: 'Commercial Transit Network',
+            riskLevel: 'LOW',
+            isProxyOrVpn: false,
+            routingDetails: live.as ? `BGP: ${live.as}` : ''
+          };
+          CACHE.set(cacheKey, geoRecord);
+          return sendJson(res, 200, geoRecord);
+        }
+      }
+    } catch {
+      // Both external providers unavailable
+    }
+
+    // Return explicit UNAVAILABLE on failure - NEVER fabricate coordinates
     return sendJson(res, 200, {
-      ip,
-      country: 'Unresolved',
-      countryCode: 'UN',
+      ip: cleanIP,
+      status: 'UNAVAILABLE',
+      error: 'Geolocation unavailable',
+      country: 'Geolocation unavailable',
+      countryCode: '',
+      region: '',
+      city: '',
+      latitude: null,
+      longitude: null,
+      isp: 'Intelligence unavailable',
       asn: 'AS-UNKNOWN',
-      asnOrg: 'Resolution Unavailable',
-      isp: 'Unknown ISP',
-      riskLevel: 'UNKNOWN'
+      asnOrg: 'Autonomous System resolution offline'
     });
   }
 

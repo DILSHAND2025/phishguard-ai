@@ -106,79 +106,13 @@ const KNOWN_GEO_DATA = {
   }
 };
 
-// Master GeoLocation & ASN resolver
+import { defaultGeoService } from './geoLocationService.js';
+
+// Master GeoLocation & ASN resolver (delegates to GeoLocationService abstraction)
 export async function resolveIPGeo(ip) {
   if (!ip || typeof ip !== 'string') return null;
-  const cleanIP = ip.trim();
-
-  // Check cache
-  if (GEO_CACHE.has(cleanIP)) {
-    return GEO_CACHE.get(cleanIP);
-  }
-
-  // 1. Try querying backend gateway
-  const backendResult = await queryBackendGateway('geoip', { ip: cleanIP });
-  if (backendResult && backendResult.country) {
-    GEO_CACHE.set(cleanIP, backendResult);
-    return backendResult;
-  }
-
-  // 2. Check known synthetic database
-  if (KNOWN_GEO_DATA[cleanIP]) {
-    const data = KNOWN_GEO_DATA[cleanIP];
-    GEO_CACHE.set(cleanIP, data);
-    return data;
-  }
-
-  // 3. Optional direct query to free ip-api.com if client allows
-  try {
-    const res = await fetch(`https://ip-api.com/json/${cleanIP}?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as`);
-    if (res.ok) {
-      const live = await res.json();
-      if (live.status === 'success') {
-        const asnParts = (live.as || '').split(' ');
-        const resolved = {
-          ip: cleanIP,
-          country: live.country || 'Unknown Country',
-          countryCode: live.countryCode || 'UN',
-          region: live.regionName || '',
-          city: live.city || '',
-          latitude: live.lat || 0,
-          longitude: live.lon || 0,
-          asn: asnParts[0] || 'Unknown ASN',
-          asnOrg: live.org || live.isp || 'Unknown Organization',
-          isp: live.isp || 'Unknown ISP',
-          networkType: 'Standard Transit Network',
-          riskLevel: 'LOW',
-          isProxyOrVpn: false,
-          routingDetails: `Live IP-API Resolution | ${live.as || ''}`
-        };
-        GEO_CACHE.set(cleanIP, resolved);
-        return resolved;
-      }
-    }
-  } catch {
-    // Graceful fallback on network block/offline
-  }
-
-  // 4. Default fallback
-  const fallback = {
-    ip: cleanIP,
-    country: 'Unresolved',
-    countryCode: 'UN',
-    region: 'N/A',
-    city: 'N/A',
-    latitude: 0,
-    longitude: 0,
-    asn: 'AS-UNKNOWN',
-    asnOrg: 'Autonomous System Resolution Unavailable',
-    isp: 'Unknown ISP',
-    networkType: 'Unclassified Subnet',
-    riskLevel: 'UNKNOWN',
-    isProxyOrVpn: false,
-    routingDetails: 'Autonomous System and Geo resolution offline'
-  };
-
-  GEO_CACHE.set(cleanIP, fallback);
-  return fallback;
+  const result = await defaultGeoService.resolveIP(ip, { role: 'SOURCE', roleLabel: 'Originating IP' });
+  return result;
 }
+
+

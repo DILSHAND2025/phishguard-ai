@@ -8,7 +8,7 @@
     "server": "node server/server.js",
     "ml": "python ml/predict.py --serve --port 8000",
     "train": "python ml/train.py",
-    "test": "node tests/engine.test.js && node --test tests/auth.test.js tests/ml.test.js",
+    "test": "node tests/engine.test.js && node --test tests/auth.test.js tests/ml.test.js tests/geo.test.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
@@ -17,6 +17,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@xyflow/react": "^12.11.6",
     "clsx": "^2.1.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.41.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

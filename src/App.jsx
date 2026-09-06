@@ -17,10 +17,11 @@ import { QuickScanModal } from './components/dashboard/QuickScanModal';
 import { getCurrentUser, logout } from './services/authService';
 
 // Core Forensic & Intelligence Services
-import { parseEmailContent } from './services/emailParser';
+import { parseEmailContent, extractNetworkIndicators } from './services/emailParser';
 import { extractAllIOCs } from './services/iocExtractor';
 import { evaluateAIThreat } from './services/aiThreatModel';
 import { resolveIPGeo } from './services/geoAsnService';
+import { defaultGeoService } from './services/geoLocationService';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from './services/evidenceFusion';
 import { correlateThreatCampaigns } from './services/campaignCorrelator';
 import { getStoredCases, createCaseFromAnalysis } from './services/caseStore';
@@ -197,8 +198,13 @@ function App() {
       // 2. Real AI/ML Threat Analysis (TF-IDF + Logistic Regression)
       const aiThreat = await evaluateAIThreat(parsedEmail);
 
-      // 3. GeoLocation & ASN Intelligence
-      const geoInfo = await resolveIPGeo(parsedEmail.originatingIP || '185.220.101.45');
+      // 3. Network Indicators & Multi-IP GeoLocation
+      const networkIndicators = extractNetworkIndicators(parsedEmail);
+      const geoList = await defaultGeoService.resolveAllIPs(networkIndicators);
+      const geoInfo = geoList.find(g => g.role === 'SOURCE' && !g.isPrivate) || 
+                      geoList.find(g => !g.isPrivate && g.status === 'SUCCESS') || 
+                      geoList[0] || 
+                      await resolveIPGeo(parsedEmail.originatingIP || '185.220.101.45');
 
       // 4. Multi-Factor Evidence Fusion
       const fusion = calculateEvidenceFusion({
@@ -206,6 +212,7 @@ function App() {
         aiThreat,
         iocs,
         geoInfo,
+        geoList,
         weights: fusionWeights
       });
 
@@ -227,6 +234,8 @@ function App() {
         iocs,
         aiThreat,
         geoInfo,
+        geoList,
+        networkIndicators,
         fusion,
         campaign: primaryCampaign,
         caseItem
@@ -360,6 +369,7 @@ function App() {
             onOpenScan={() => setIsScanModalOpen(true)}
             onInspectEmail={handleInspectEmail}
             onSelectCase={handleSelectCase}
+            currentAnalysis={currentAnalysis}
           />
         );
     }

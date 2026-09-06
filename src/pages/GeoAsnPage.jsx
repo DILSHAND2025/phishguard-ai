@@ -17,6 +17,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { GEO_LEGAL_DISCLAIMER } from '../services/geoAsnService';
+import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 
 export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
   const geoInfo = currentAnalysis?.geoInfo || {
@@ -76,6 +77,10 @@ export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
     { step: '05', title: 'Network Topology', detail: `${geoInfo.networkType || 'Tor Relay Node'}` },
     { step: '06', title: 'Observed GeoLocation', detail: `Observed infrastructure geolocates to ${geoInfo.country}` }
   ];
+
+  const geoRecordsForMap = (currentAnalysis?.geoList && currentAnalysis.geoList.length > 0)
+    ? currentAnalysis.geoList
+    : infrastructureList;
 
   return (
     <div className="space-y-6 pb-12 font-sans">
@@ -146,6 +151,13 @@ export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
           </p>
         </div>
       </div>
+
+      {/* Interactive Forensic Geolocation Map */}
+      <ForensicGeoMap 
+        geoRecords={geoRecordsForMap}
+        title="FORENSIC GEOLOCATION & NETWORK ROUTING"
+        subtitle="Live Geo-Coordinates, ISP Organization, and Transit Routing Topography"
+      />
 
       {/* Infrastructure Telemetry Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono">

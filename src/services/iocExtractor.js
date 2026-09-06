@@ -13,7 +13,7 @@
  * If external intelligence is unavailable, display 'UNKNOWN — Intelligence unavailable'.
  */
 
-import { extractIPv4, isPrivateIP } from './emailParser.js';
+import { extractIPv4, extractIPv6, extractAllIPs, isPrivateIP } from './emailParser.js';
 
 // Regex patterns for IOC extraction
 const URL_REGEX = /(?:https?|hxxps?):\/\/[^\s<>"'{}|\\^`\[\]]+/gi;
@@ -135,7 +135,7 @@ export function extractAllIOCs(parsedEmail) {
     }
   });
 
-  const allIPs = extractIPv4(rawContent);
+  const allIPs = extractAllIPs(rawContent);
   allIPs.forEach(ip => {
     if (!isPrivateIP(ip)) {
       const isMal = KNOWN_SUSPICIOUS_IPS.includes(ip);

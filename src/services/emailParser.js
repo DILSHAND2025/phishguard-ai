@@ -83,24 +83,64 @@ export function parseEmailAddress(raw) {
   return { name: address.split('@')[0], address, domain, raw: cleaned };
 }
 
-// Extract public IPv4 from a string
+// IPv4 and IPv6 regex definitions
+export const IPV4_REGEX = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
+export const IPV6_REGEX = /(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])/gi;
+
+// Validate if a string is a valid IPv4 or IPv6 address
+export function isValidIP(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const clean = ip.trim();
+  const ipv4Exact = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  if (ipv4Exact.test(clean)) return true;
+  return clean.includes(':') && (clean.match(IPV6_REGEX) || [])[0] === clean;
+}
+
+// Extract public and private IPv4 from a string
 export function extractIPv4(text) {
-  if (!text) return [];
-  const ipv4Regex = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
-  const matches = text.match(ipv4Regex) || [];
+  if (!text || typeof text !== 'string') return [];
+  const matches = text.match(IPV4_REGEX) || [];
   return Array.from(new Set(matches));
 }
 
-// Check if IP is private/internal
+// Extract IPv6 from a string
+export function extractIPv6(text) {
+  if (!text || typeof text !== 'string') return [];
+  const matches = text.match(IPV6_REGEX) || [];
+  return Array.from(new Set(matches.map(ip => ip.trim())));
+}
+
+// Extract all unique IP addresses (IPv4 & IPv6)
+export function extractAllIPs(text) {
+  if (!text || typeof text !== 'string') return [];
+  const v4 = extractIPv4(text);
+  const v6 = extractIPv6(text);
+  return Array.from(new Set([...v4, ...v6]));
+}
+
+// Check if IP is private/reserved/internal (IPv4 & IPv6)
 export function isPrivateIP(ip) {
-  if (!ip) return true;
-  if (ip.startsWith('10.') || ip.startsWith('127.') || ip.startsWith('0.')) return true;
-  if (ip.startsWith('192.168.')) return true;
-  if (ip.startsWith('172.')) {
-    const secondOctet = parseInt(ip.split('.')[1], 10);
+  if (!ip || typeof ip !== 'string') return true;
+  const clean = ip.trim().toLowerCase();
+
+  // IPv4 Private & Reserved ranges
+  if (clean.startsWith('10.') || clean.startsWith('127.') || clean.startsWith('0.')) return true;
+  if (clean.startsWith('192.168.')) return true;
+  if (clean.startsWith('169.254.')) return true; // Link-local
+  if (clean.startsWith('100.64.')) return true; // Carrier-grade NAT
+  if (clean.startsWith('172.')) {
+    const parts = clean.split('.');
+    const secondOctet = parseInt(parts[1], 10);
     if (secondOctet >= 16 && secondOctet <= 31) return true;
   }
-  if (ip === '255.255.255.255') return true;
+  if (clean === '255.255.255.255' || clean.startsWith('224.') || clean.startsWith('240.')) return true;
+
+  // IPv6 Private & Reserved ranges
+  if (clean === '::1' || clean === '::') return true; // Loopback & unspecified
+  if (clean.startsWith('fe80:')) return true; // Link-local
+  if (clean.startsWith('fc00:') || clean.startsWith('fd00:')) return true; // Unique local (ULA)
+  if (clean.startsWith('ff00:')) return true; // Multicast
+
   return false;
 }
 
@@ -388,7 +428,7 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
     returnPathMismatch,
     messageId,
     receivedHops: parsedHops,
-    originatingIP: originatingIP || '185.220.101.45',
+    originatingIP: originatingIP || '',
     headers,
     rawHeaders: headerText,
     body: cleanBody,
@@ -402,3 +442,107 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
     ingestedAt: new Date().toISOString()
   };
 }
+
+/**
+ * Extract and categorize all network indicators (IPv4, IPv6, URL hosts) from parsed email.
+ * Clearly distinguishes forensic roles:
+ * - SOURCE: Originating egress IP
+ * - MAIL_SERVER: Intermediate MTA transit relays
+ * - URL_HOST: Suspicious URL / Phishing infrastructure IP
+ * - PRIVATE: RFC 1918 / loopback internal IP (ignored for public geolocation)
+ */
+export function extractNetworkIndicators(parsedEmail) {
+  if (!parsedEmail) return [];
+
+  const indicators = [];
+  const seenIPs = new Set();
+
+  function addIndicator(ip, role, roleLabel, context) {
+    if (!ip || !isValidIP(ip)) return;
+    const cleanIP = ip.trim();
+    if (seenIPs.has(cleanIP)) return;
+    seenIPs.add(cleanIP);
+
+    const isPriv = isPrivateIP(cleanIP);
+    indicators.push({
+      ip: cleanIP,
+      role: isPriv ? 'PRIVATE' : role,
+      roleLabel: isPriv ? `${roleLabel} (Private/Non-Routable)` : roleLabel,
+      isPrivate: isPriv,
+      context,
+      confidence: role === 'SOURCE' ? 'HIGH' : role === 'URL_HOST' ? 'HIGH' : 'MEDIUM'
+    });
+  }
+
+  // 1. Originating / Source IP
+  if (parsedEmail.originatingIP) {
+    addIndicator(
+      parsedEmail.originatingIP,
+      'SOURCE',
+      'Source / Originating IP',
+      'Envelope Egress / Earliest External Hop'
+    );
+  }
+
+  // 2. Intermediate MTA hops
+  if (Array.isArray(parsedEmail.receivedHops)) {
+    parsedEmail.receivedHops.forEach(hop => {
+      if (hop.extractedIP) {
+        addIndicator(
+          hop.extractedIP,
+          'MAIL_SERVER',
+          `Email Server / Transit Hop (Hop #${hop.hopNumber})`,
+          `Received: from ${hop.from || 'MTA relay'} by ${hop.by || 'gateway'}`
+        );
+      }
+    });
+  }
+
+  // 3. Explicit IPs from scenario / metadata
+  if (Array.isArray(parsedEmail.ips)) {
+    parsedEmail.ips.forEach(ipItem => {
+      const ip = (typeof ipItem === 'string' ? ipItem.split(' ')[0] : '').trim();
+      if (ip) {
+        addIndicator(ip, 'MAIL_SERVER', 'Transit Routing Hop', 'Scenario Network Trace');
+      }
+    });
+  }
+
+  // 4. URL Host IPs
+  const urls = Array.isArray(parsedEmail.urls) ? parsedEmail.urls : [];
+  const bodyText = `${parsedEmail.body || ''} ${parsedEmail.rawSnippet || ''}`;
+  const urlMatches = bodyText.match(/(?:https?|hxxps?):\/\/[^\s<>"'{}|\\^`\[\]]+/gi) || [];
+  const combinedUrls = Array.from(new Set([...urls, ...urlMatches]));
+
+  combinedUrls.forEach(urlStr => {
+    try {
+      const normalized = urlStr.replace(/^hxxps?:\/\//i, 'http://').replace(/\[\.\]/g, '.');
+      const urlObj = new URL(normalized);
+      const host = urlObj.hostname.replace(/^\[|\]$/g, ''); // strip IPv6 brackets if any
+      if (isValidIP(host)) {
+        addIndicator(
+          host,
+          'URL_HOST',
+          'URL / Phishing Infrastructure IP',
+          `Direct IP in hyperlink: ${urlStr}`
+        );
+      }
+    } catch {
+      // ignore malformed URLs
+    }
+  });
+
+  // 5. Any remaining IPs found in body content
+  const bodyIPs = extractAllIPs(bodyText);
+  bodyIPs.forEach(ip => {
+    addIndicator(
+      ip,
+      'BODY_MENTION',
+      'Referenced IP Address',
+      'Referenced inside email message content'
+    );
+  });
+
+  return indicators;
+}
+

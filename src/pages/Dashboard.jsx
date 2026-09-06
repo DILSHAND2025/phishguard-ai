@@ -19,9 +19,80 @@ import { AttackVectorChart } from '../components/dashboard/AttackVectorChart';
 import { LiveThreatStream } from '../components/dashboard/LiveThreatStream';
 import { IncidentQueueTable } from '../components/dashboard/IncidentQueueTable';
 import { MitreMatrixSummary } from '../components/dashboard/MitreMatrixSummary';
+import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 import { SOC_SUMMARY } from '../data/mockSocData';
 
-export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCase }) => {
+export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCase, currentAnalysis }) => {
+  const defaultNodes = [
+    {
+      ip: '185.220.101.45',
+      role: 'SOURCE',
+      roleLabel: 'Source / Originating IP',
+      country: 'Germany',
+      countryCode: 'DE',
+      region: 'Hesse',
+      city: 'Frankfurt am Main',
+      latitude: 50.1109,
+      longitude: 8.6821,
+      timezone: 'Europe/Berlin',
+      asn: 'AS9009',
+      asnOrg: 'M247 Ltd Europe',
+      isp: 'M247 Europe S.R.L.',
+      networkType: 'Tor Exit Node / Anonymizing Relay',
+      isProxyOrVpn: true,
+      dataSource: 'DEMO / SYNTHETIC DATA',
+      isDemo: true,
+      observedEvidence: 'Observed IP 185.220.101.45 geolocates to Frankfurt am Main, Germany (AS9009 - M247 Europe)',
+      inferredContext: 'Tor Exit Node / Anonymizing Relay repeatedly observed in credential harvesting campaigns'
+    },
+    {
+      ip: '45.154.255.82',
+      role: 'URL_HOST',
+      roleLabel: 'URL / Phishing Infrastructure IP',
+      country: 'Netherlands',
+      countryCode: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      latitude: 52.3676,
+      longitude: 4.9041,
+      timezone: 'Europe/Amsterdam',
+      asn: 'AS202425',
+      asnOrg: 'IP Volume Inc',
+      isp: 'IP Volume Networks',
+      networkType: 'Commercial Hosting / Fast-Flux Proxy',
+      isProxyOrVpn: true,
+      dataSource: 'DEMO / SYNTHETIC DATA',
+      isDemo: true,
+      observedEvidence: 'Observed IP 45.154.255.82 geolocates to Amsterdam, Netherlands (AS202425 - IP Volume Networks)',
+      inferredContext: 'Commercial hosting infrastructure hosting lookalike financial credential portals'
+    },
+    {
+      ip: '194.26.29.110',
+      role: 'MAIL_SERVER',
+      roleLabel: 'Email Server / Transit Hop',
+      country: 'Romania',
+      countryCode: 'RO',
+      region: 'Bucharest',
+      city: 'Bucharest',
+      latitude: 44.4268,
+      longitude: 26.1025,
+      timezone: 'Europe/Bucharest',
+      asn: 'AS48693',
+      asnOrg: 'HostRoyale Egress Relay',
+      isp: 'HostRoyale Ltd',
+      networkType: 'Intermediate Transit Relay',
+      isProxyOrVpn: false,
+      dataSource: 'DEMO / SYNTHETIC DATA',
+      isDemo: true,
+      observedEvidence: 'Observed IP 194.26.29.110 geolocates to Bucharest, Romania (AS48693 - HostRoyale Ltd)',
+      inferredContext: 'Intermediate MTA relay routing untrusted spoofed mail envelope'
+    }
+  ];
+
+  const activeGeoRecords = (currentAnalysis?.geoList && currentAnalysis.geoList.length > 0)
+    ? currentAnalysis.geoList
+    : (currentAnalysis?.geoInfo ? [currentAnalysis.geoInfo] : defaultNodes);
+
   return (
     <div className="space-y-6 pb-12">
       
@@ -149,6 +220,13 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
           <AttackVectorChart />
         </div>
       </div>
+
+      {/* Forensic Geolocation Interactive Map Card */}
+      <ForensicGeoMap 
+        geoRecords={activeGeoRecords}
+        title="FORENSIC GEOLOCATION"
+        subtitle="Multi-Hop Network Egress & Phishing Infrastructure Topology"
+      />
 
       {/* Live Threat Stream */}
       <LiveThreatStream 

@@ -35,6 +35,7 @@ export function calculateEvidenceFusion({
   aiThreat,
   iocs = [],
   geoInfo = null,
+  geoList = [],
   weights = DEFAULT_FUSION_WEIGHTS
 }) {
   const factors = [];
@@ -212,16 +213,30 @@ export function calculateEvidenceFusion({
   let geoScore = 0;
   const geoReasons = [];
 
-  if (geoInfo?.isProxyOrVpn || (geoInfo?.networkType && geoInfo.networkType.toLowerCase().includes('tor'))) {
-    geoScore += 8;
-    geoReasons.push(`⚠️ Infrastructure categorized as anonymizing proxy/Tor node (${geoInfo.asn} - ${geoInfo.asnOrg}).`);
-  } else if (geoInfo?.networkType && geoInfo.networkType.toLowerCase().includes('bulletproof')) {
-    geoScore += 10;
-    geoReasons.push(`❌ Hosting infrastructure on known bulletproof provider (${geoInfo.country}).`);
-  } else if (geoInfo?.riskLevel === 'HIGH') {
-    geoScore += 5;
-    geoReasons.push(`⚠️ High-risk egress routing through ${geoInfo.country} (${geoInfo.asn}).`);
-  }
+  const allGeoNodes = Array.isArray(geoList) && geoList.length > 0 
+    ? geoList 
+    : (geoInfo ? [geoInfo] : []);
+
+  allGeoNodes.forEach(node => {
+    if (!node || node.isPrivate) return;
+
+    if (node.isProxyOrVpn || (node.networkType && node.networkType.toLowerCase().includes('tor'))) {
+      if (!geoReasons.some(r => r.includes(node.ip))) {
+        geoScore = Math.max(geoScore, 8);
+        geoReasons.push(`⚠️ ${node.roleLabel || 'Infrastructure'} (${node.ip}) categorized as anonymizing proxy/Tor relay (${node.asn || 'AS-UNKNOWN'} - ${node.country}).`);
+      }
+    } else if (node.networkType && node.networkType.toLowerCase().includes('bulletproof')) {
+      if (!geoReasons.some(r => r.includes(node.ip))) {
+        geoScore = Math.max(geoScore, 10);
+        geoReasons.push(`❌ ${node.roleLabel || 'Hosting infrastructure'} (${node.ip}) hosted on known bulletproof provider (${node.country}).`);
+      }
+    } else if (node.riskLevel === 'HIGH') {
+      if (!geoReasons.some(r => r.includes(node.ip))) {
+        geoScore = Math.max(geoScore, 5);
+        geoReasons.push(`⚠️ ${node.roleLabel || 'Routing hop'} (${node.ip}) exhibits high-risk egress routing through ${node.country} (${node.asn || ''}).`);
+      }
+    }
+  });
 
   const clampedGeoScore = Math.min(weights.geoAsnContext, geoScore);
   totalScore += clampedGeoScore;
@@ -236,7 +251,7 @@ export function calculateEvidenceFusion({
     status: clampedGeoScore >= 4 ? 'FLAGGED' : 'PASS',
     evidence: geoReasons.length > 0 
       ? geoReasons.join(' ')
-      : `Observed network infrastructure geolocates to ${geoInfo?.country || 'standard subnet'} with standard corporate routing.`,
+      : `Observed network infrastructure (${allGeoNodes.map(n => n.ip).filter(Boolean).join(', ') || 'standard subnet'}) geolocates with standard corporate routing.`,
     reasons: geoReasons
   });
 
