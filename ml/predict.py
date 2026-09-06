@@ -8,15 +8,13 @@ import sys
 import json
 import argparse
 from typing import List, Dict, Any, Optional
+# pyrefly: ignore [missing-import]
 import joblib
 
-try:
-    from fastapi import FastAPI, HTTPException, status
-    from fastapi.middleware.cors import CORSMiddleware
-    from pydantic import BaseModel, Field
-    FASTAPI_AVAILABLE = True
-except ImportError:
-    FASTAPI_AVAILABLE = False
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import uvicorn
 
 # Ensure repository root is on sys.path for direct module imports
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -125,57 +123,56 @@ def predict_threat(text: str) -> Dict[str, Any]:
 # ----------------------------------------------------------------------
 # FastAPI Microservice Definition
 # ----------------------------------------------------------------------
-if FASTAPI_AVAILABLE:
-    app = FastAPI(
-        title="MAVERICK AI Threat Detection Service",
-        description="Real ML TF-IDF + Logistic Regression Phishing Classifier API (SIH 2026)",
-        version="1.0.0"
-    )
+app = FastAPI(
+    title="MAVERICK AI Threat Detection Service",
+    description="Real ML TF-IDF + Logistic Regression Phishing Classifier API (SIH 2026)",
+    version="1.0.0"
+)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    class PredictRequest(BaseModel):
-        text: Optional[str] = Field(default="", description="Email subject and body text to analyze")
+class PredictRequest(BaseModel):
+    text: Optional[str] = Field(default="", description="Email subject and body text to analyze")
 
-    class PredictResponse(BaseModel):
-        prediction: str
-        phishing_probability: float
-        legitimate_probability: float
-        model: str
-        confidence: Optional[float] = None
-        top_features: Optional[List[Dict[str, Any]]] = None
-        status: Optional[str] = None
-        note: Optional[str] = None
+class PredictResponse(BaseModel):
+    prediction: str
+    phishing_probability: float
+    legitimate_probability: float
+    model: str
+    confidence: Optional[float] = None
+    top_features: Optional[List[Dict[str, Any]]] = None
+    status: Optional[str] = None
+    note: Optional[str] = None
 
-    @app.get("/health")
-    def health_check():
-        artifacts_exist = os.path.exists(VEC_PATH) and os.path.exists(MODEL_PATH)
-        return {
-            "status": "online" if artifacts_exist else "model_missing",
-            "service": "MAVERICK ML Inference Engine",
-            "model_type": "TF-IDF + Logistic Regression",
-            "artifacts_loaded": _model is not None,
-            "vectorizer_path": VEC_PATH,
-            "model_path": MODEL_PATH
-        }
+@app.get("/health")
+def health_check():
+    artifacts_exist = os.path.exists(VEC_PATH) and os.path.exists(MODEL_PATH)
+    return {
+        "status": "online" if artifacts_exist else "model_missing",
+        "service": "MAVERICK ML Inference Engine",
+        "model_type": "TF-IDF + Logistic Regression",
+        "artifacts_loaded": _model is not None,
+        "vectorizer_path": VEC_PATH,
+        "model_path": MODEL_PATH
+    }
 
-    @app.post("/predict", response_model=PredictResponse)
-    def predict_endpoint(req: PredictRequest):
-        try:
-            result = predict_threat(req.text or "")
-            if result.get("status") == "INVALID_INPUT":
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
-            return result
-        except FileNotFoundError as e:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Prediction failure: {str(e)}")
+@app.post("/predict", response_model=PredictResponse)
+def predict_endpoint(req: PredictRequest):
+    try:
+        result = predict_threat(req.text or "")
+        if result.get("status") == "INVALID_INPUT":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error"))
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Prediction failure: {str(e)}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MAVERICK ML Inference Tool")
@@ -186,10 +183,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.serve:
-        if not FASTAPI_AVAILABLE:
-            print("Error: FastAPI or Uvicorn not installed.")
-            sys.exit(1)
-        import uvicorn
         print(f"[*] Starting MAVERICK ML Inference Service on http://{args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port)
     elif args.text:

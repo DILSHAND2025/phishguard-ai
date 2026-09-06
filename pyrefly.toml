@@ -1,0 +1,9 @@
+project-includes = [
+    "ml/**/*.py",
+    "*.py"
+]
+search-path = [
+    ".",
+    "ml"
+]
+python-interpreter-path = "C:/Users/Dilshand/AppData/Local/Programs/Python/Python314/python.exe"
