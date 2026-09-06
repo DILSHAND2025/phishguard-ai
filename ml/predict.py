@@ -4,12 +4,11 @@ Smart India Hackathon 2026
 """
 
 import os
-import re
+import sys
 import json
 import argparse
 from typing import List, Dict, Any, Optional
 import joblib
-import numpy as np
 
 try:
     from fastapi import FastAPI, HTTPException, status
@@ -19,11 +18,14 @@ try:
 except ImportError:
     FASTAPI_AVAILABLE = False
 
+# Ensure repository root is on sys.path for direct module imports
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 try:
     from ml.train import clean_text
 except ImportError:
-    import sys
-    sys.path.append(os.path.dirname(__file__))
     from train import clean_text
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
@@ -186,7 +188,7 @@ if __name__ == "__main__":
     if args.serve:
         if not FASTAPI_AVAILABLE:
             print("Error: FastAPI or Uvicorn not installed.")
-            exit(1)
+            sys.exit(1)
         import uvicorn
         print(f"[*] Starting MAVERICK ML Inference Service on http://{args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port)
