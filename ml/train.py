@@ -9,6 +9,7 @@ import re
 import json
 import argparse
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -43,7 +44,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def train(dataset_path: str = "ml/dataset/phishing_emails.csv", model_dir: str = "ml/model"):
+def train(dataset_path: str = "ml/dataset/Phishing_Email.csv", model_dir: str = "ml/model"):
     """
     Train TF-IDF + Logistic Regression model and serialize artifacts.
     """
@@ -58,8 +59,16 @@ def train(dataset_path: str = "ml/dataset/phishing_emails.csv", model_dir: str =
     print(f"[*] Loading dataset from: {dataset_path}")
     df = pd.read_csv(dataset_path)
 
-    # 2. Missing value handling
+    # 2. Dynamic Missing Value & Column Handling (Supports both Kaggle & Old format)
     initial_count = len(df)
+    
+    # Check if this is the Kaggle dataset
+    if 'Email Type' in df.columns and 'Email Text' in df.columns:
+        print("[*] Detected Kaggle Dataset format. Mapping columns...")
+        df = df.rename(columns={'Email Text': 'text'})
+        df['label'] = df['Email Type'].map({'Safe Email': 0, 'Phishing Email': 1})
+    
+    # Drop empty rows
     df = df.dropna(subset=['text', 'label'])
     df['label'] = df['label'].astype(int)
     print(f"[*] Total valid samples: {len(df)} (Dropped {initial_count - len(df)} empty rows)")
@@ -68,7 +77,7 @@ def train(dataset_path: str = "ml/dataset/phishing_emails.csv", model_dir: str =
     print(f"[*] Class distribution: Legitimate (0) = {class_counts.get(0, 0)}, Phishing (1) = {class_counts.get(1, 0)}")
 
     # 3. Preprocess text
-    print("[*] Preprocessing text...")
+    print("[*] Preprocessing text (this may take a moment for large datasets)...")
     df['cleaned_text'] = df['text'].apply(clean_text)
     
     # Filter empty after cleaning
@@ -85,11 +94,11 @@ def train(dataset_path: str = "ml/dataset/phishing_emails.csv", model_dir: str =
     print(f"    - Training set size: {len(X_train)}")
     print(f"    - Test set size:     {len(X_test)}")
 
-    # 5. TF-IDF Vectorization
-    print("[*] Fitting TF-IDF Vectorizer (ngram_range=(1, 2), max_features=2500)...")
+    # 5. TF-IDF Vectorization (Increased max_features to 5000 for the larger dataset)
+    print("[*] Fitting TF-IDF Vectorizer (ngram_range=(1, 2), max_features=5000)...")
     vectorizer = TfidfVectorizer(
         ngram_range=(1, 2),
-        max_features=2500,
+        max_features=5000,
         sublinear_tf=True,
         min_df=1,
         stop_words='english'
@@ -185,7 +194,7 @@ def train(dataset_path: str = "ml/dataset/phishing_emails.csv", model_dir: str =
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train MAVERICK AI Threat Detection Model")
-    parser.add_argument("--dataset", default="ml/dataset/phishing_emails.csv", help="Path to training CSV")
+    parser.add_argument("--dataset", default="ml/dataset/Phishing_Email.csv", help="Path to training CSV")
     parser.add_argument("--model-dir", default="ml/model", help="Directory to save serialized models")
     args = parser.parse_args()
 

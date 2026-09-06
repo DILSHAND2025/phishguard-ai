@@ -1,148 +1,148 @@
 {
   "model_type": "TF-IDF + Logistic Regression",
-  "dataset_path": "ml/dataset/phishing_emails.csv",
-  "total_samples": 80,
-  "train_samples": 64,
-  "test_samples": 16,
+  "dataset_path": "dataset/Phishing_Email.csv",
+  "total_samples": 18631,
+  "train_samples": 14904,
+  "test_samples": 3727,
   "train_test_split": "80/20",
   "random_state": 42,
   "metrics": {
-    "accuracy": 0.9375,
-    "precision": 0.8889,
-    "recall": 1.0,
-    "f1_score": 0.9412,
+    "accuracy": 0.9649,
+    "precision": 0.9446,
+    "recall": 0.9672,
+    "f1_score": 0.9557,
     "confusion_matrix": {
-      "true_negative": 7,
-      "false_positive": 1,
-      "false_negative": 0,
-      "true_positive": 8
+      "true_negative": 2182,
+      "false_positive": 83,
+      "false_negative": 48,
+      "true_positive": 1414
     }
   },
   "classification_report": {
     "0": {
-      "precision": 1.0,
-      "recall": 0.875,
-      "f1-score": 0.9333333333333333,
-      "support": 8.0
+      "precision": 0.97847533632287,
+      "recall": 0.963355408388521,
+      "f1-score": 0.9708565072302558,
+      "support": 2265.0
     },
     "1": {
-      "precision": 0.8888888888888888,
-      "recall": 1.0,
-      "f1-score": 0.9411764705882353,
-      "support": 8.0
+      "precision": 0.9445557782231129,
+      "recall": 0.9671682626538988,
+      "f1-score": 0.9557282865833052,
+      "support": 1462.0
     },
-    "accuracy": 0.9375,
+    "accuracy": 0.964851086664878,
     "macro avg": {
-      "precision": 0.9444444444444444,
-      "recall": 0.9375,
-      "f1-score": 0.9372549019607843,
-      "support": 16.0
+      "precision": 0.9615155572729914,
+      "recall": 0.9652618355212099,
+      "f1-score": 0.9632923969067806,
+      "support": 3727.0
     },
     "weighted avg": {
-      "precision": 0.9444444444444444,
-      "recall": 0.9375,
-      "f1-score": 0.9372549019607843,
-      "support": 16.0
+      "precision": 0.9651696228960268,
+      "recall": 0.964851086664878,
+      "f1-score": 0.9649221207033329,
+      "support": 3727.0
     }
   },
   "top_phishing_indicators": [
     {
-      "term": "url_token",
-      "weight": 0.711472835310326
+      "term": "click",
+      "weight": 5.953632685803568
     },
     {
-      "term": "urgent",
-      "weight": 0.6166487497654743
+      "term": "http",
+      "weight": 4.179449540090095
     },
     {
-      "term": "immediately",
-      "weight": 0.5982044280526767
+      "term": "remove",
+      "weight": 4.036730175210747
     },
     {
-      "term": "wire",
-      "weight": 0.5627501739867904
+      "term": "2005",
+      "weight": 3.955956139944812
     },
     {
-      "term": "account",
-      "weight": 0.5149043711813668
+      "term": "2004",
+      "weight": 3.809417168312588
     },
     {
-      "term": "sign",
-      "weight": 0.47805166812280486
+      "term": "free",
+      "weight": 3.751042617605681
     },
     {
-      "term": "immediate",
-      "weight": 0.46719022801463367
+      "term": "email",
+      "weight": 3.4327395800053404
     },
     {
-      "term": "payment",
-      "weight": 0.3639923897166921
+      "term": "money",
+      "weight": 3.3856490111621067
     },
     {
-      "term": "required",
-      "weight": 0.3601824356740498
+      "term": "life",
+      "weight": 3.3409022418966554
     },
     {
-      "term": "remittance",
-      "weight": 0.3570681782834512
+      "term": "best",
+      "weight": 2.8206323726446336
     },
     {
-      "term": "credentials",
-      "weight": 0.34533485272723585
+      "term": "site",
+      "weight": 2.805938088913363
     },
     {
-      "term": "notice",
-      "weight": 0.3079258275834249
+      "term": "removed",
+      "weight": 2.7718187519945765
     }
   ],
   "top_legitimate_indicators": [
     {
-      "term": "hi",
-      "weight": -0.5306080334001155
+      "term": "enron",
+      "weight": -8.35514429888329
     },
     {
-      "term": "team",
-      "weight": -0.48074674698867104
+      "term": "wrote",
+      "weight": -5.823296704451741
     },
     {
-      "term": "scheduled",
-      "weight": -0.40924391114812203
+      "term": "thanks",
+      "weight": -5.174658093149987
     },
     {
-      "term": "internal",
-      "weight": -0.40904424806135153
+      "term": "url_token",
+      "weight": -4.949114293390305
     },
     {
-      "term": "hi team",
-      "weight": -0.3702235833073247
+      "term": "language",
+      "weight": -4.648473201010198
     },
     {
-      "term": "cloud",
-      "weight": -0.33647658460917984
+      "term": "2002",
+      "weight": -4.499651596085561
     },
     {
-      "term": "weekly",
-      "weight": -0.3194757647604004
+      "term": "university",
+      "weight": -4.1565674101833485
     },
     {
-      "term": "review",
-      "weight": -0.3052653796445753
+      "term": "vince",
+      "weight": -3.976258405207141
     },
     {
-      "term": "completed",
-      "weight": -0.27453048072913755
+      "term": "attached",
+      "weight": -3.7919848141588384
     },
     {
-      "term": "quarterly",
-      "weight": -0.27317885935928576
+      "term": "edu",
+      "weight": -3.7572680136018195
     },
     {
-      "term": "support",
-      "weight": -0.272717701544577
+      "term": "linguistics",
+      "weight": -3.7427667197740826
     },
     {
-      "term": "end",
-      "weight": -0.2726372987654389
+      "term": "2001",
+      "weight": -3.720518274329437
     }
   ]
 }
