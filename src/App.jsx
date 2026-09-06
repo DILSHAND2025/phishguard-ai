@@ -194,8 +194,8 @@ function App() {
       // 1. Automated IOC Extraction
       const iocs = extractAllIOCs(parsedEmail);
 
-      // 2. AI Threat Analysis
-      const aiThreat = evaluateAIThreat(parsedEmail);
+      // 2. Real AI/ML Threat Analysis (TF-IDF + Logistic Regression)
+      const aiThreat = await evaluateAIThreat(parsedEmail);
 
       // 3. GeoLocation & ASN Intelligence
       const geoInfo = await resolveIPGeo(parsedEmail.originatingIP || '185.220.101.45');

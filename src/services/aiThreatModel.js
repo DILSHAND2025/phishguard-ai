@@ -1,18 +1,19 @@
 /**
- * MAVERICK — AI/NLP Threat Detection Service
- * Smart India Hackathon 2026
+ * MAVERICK — Real Machine Learning Threat Detection Service
+ * Model: TF-IDF Vectorizer + Logistic Regression (SIH 2026 Core Component)
  * 
- * Modular NLP pipeline combining:
- * 1. Text Preprocessing (tokenization, lowercase, normalization, n-grams)
- * 2. TF-IDF & Linguistic Indicator Extraction
- * 3. Explainable Classifier (urgency, coercion, credential theft, financial diversion, impersonation)
- * 4. Phishing Probability computation (%)
+ * Flow:
+ * Email Text -> Preprocessing -> TF-IDF Vectorizer -> Trained Logistic Regression
+ *   -> Phishing Probability -> Evidence Fusion -> Final MAVERICK Risk Score
  * 
- * Treated strictly as ONE evidence source within the multi-layer fusion engine.
+ * Strict Error Handling & Resilience:
+ * - Genuine ML inference: queries FastAPI ML microservice / backend prediction gateway
+ * - If ML service is unavailable: sets status to 'UNAVAILABLE' (never fabricates predictions)
+ * - Forensic analysis continues unimpeded with remaining evidence layers
  */
 
-// Calibrated high-risk phishing linguistic patterns with indicator categories & weights
-const LINGUISTIC_THREAT_PATTERNS = [
+// Calibrated high-risk phishing linguistic patterns for supplementary explainability
+export const LINGUISTIC_THREAT_PATTERNS = [
   {
     category: 'Coercive Urgency',
     weight: 18,
@@ -51,12 +52,14 @@ export function preprocessText(text) {
   return text
     .toLowerCase()
     .replace(/<[^>]+>/g, ' ') // strip HTML tags
-    .replace(/[^\w\s@.-]/g, ' ') // strip non-alphanumeric punctuation
+    .replace(/https?:\/\/\S+|www\.\S+/g, ' url_token ')
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, ' email_token ')
+    .replace(/[^a-zA-Z0-9_\s]/g, ' ') // strip non-alphanumeric punctuation
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Extract matched indicators from text
+// Extract matched textual heuristic indicators for supplementary explainability
 export function extractTextualIndicators(rawText) {
   if (!rawText) return [];
   const matchedIndicators = [];
@@ -83,49 +86,154 @@ export function extractTextualIndicators(rawText) {
   return matchedIndicators;
 }
 
-// Master AI Threat Predictor
-export function evaluateAIThreat(parsedEmail) {
-  const fullText = `${parsedEmail.subject || ''} \n ${parsedEmail.body || ''} \n ${parsedEmail.sender || ''}`;
-  const preprocessed = preprocessText(fullText);
-
-  // Extract detected indicators
-  const indicators = extractTextualIndicators(fullText);
-
-  // Calculate raw NLP threat score based on matched pattern weights
-  let rawScore = 0;
-  indicators.forEach(ind => {
-    rawScore += ind.weight;
-  });
-
-  // Additional weight if lookalike or suspicious keywords exist in Subject
-  const subjectLower = (parsedEmail.subject || '').toLowerCase();
-  if (subjectLower.includes('urgent') || subjectLower.includes('wire') || subjectLower.includes('mandatory')) {
-    rawScore += 12;
+/**
+ * Query real Machine Learning Prediction Endpoint
+ * Supports FastAPI microservice (port 8000) and backend gateway proxy (/api/ml/predict, /predict).
+ */
+export async function queryMLPrediction(text) {
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return {
+      prediction: 'UNAVAILABLE',
+      phishing_probability: null,
+      legitimate_probability: null,
+      model: 'TF-IDF + Logistic Regression',
+      status: 'EMPTY_INPUT',
+      error: 'Empty or missing email text'
+    };
   }
 
-  // Bound raw score to a calibrated probability [5% - 98%]
-  let probability = Math.min(98, Math.max(8, Math.round((rawScore / 110) * 100)));
+  const endpoints = [
+    'http://127.0.0.1:8000/predict',
+    '/api/ml/predict',
+    '/predict'
+  ];
 
-  // If email has completely benign markers and no indicators, lower probability
-  if (indicators.length === 0) {
-    probability = 12;
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(2500)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.prediction && data.prediction !== 'UNAVAILABLE') {
+          return {
+            ...data,
+            status: 'SUCCESS'
+          };
+        }
+      }
+    } catch {
+      // Continue to next endpoint fallback
+    }
   }
 
-  // Determine model confidence
-  const confidence = indicators.length >= 3 ? 94 : indicators.length >= 1 ? 82 : 70;
-
-  // Key tokens for forensic display
-  const keyTokens = indicators.map(i => i.token);
+  // If running in Node.js environment (e.g. tests / server), fallback to local CLI inference
+  if (typeof window === 'undefined' && typeof process !== 'undefined') {
+    try {
+      const cpModuleName = 'node:child_process';
+      const pathModuleName = 'node:path';
+      const { execFileSync } = await import(/* @vite-ignore */ cpModuleName);
+      const path = await import(/* @vite-ignore */ pathModuleName);
+      const scriptPath = path.resolve(process.cwd(), 'ml', 'predict.py');
+      const stdout = execFileSync('python', [scriptPath, '--text', text], {
+        encoding: 'utf-8',
+        timeout: 4000
+      });
+      const data = JSON.parse(stdout.trim());
+      if (data && data.prediction) {
+        return {
+          ...data,
+          status: 'SUCCESS'
+        };
+      }
+    } catch {
+      // Python CLI not available or errored
+    }
+  }
 
   return {
-    phishingProbability: probability,
+    prediction: 'UNAVAILABLE',
+    phishing_probability: null,
+    legitimate_probability: null,
+    model: 'TF-IDF + Logistic Regression',
+    status: 'UNAVAILABLE',
+    error: 'ML service unavailable'
+  };
+}
+
+/**
+ * Master Real AI/ML Threat Evaluator
+ * Integrates real ML model inference with supplementary linguistic indicators.
+ */
+export async function evaluateAIThreat(parsedEmail, options = {}) {
+  const fullText = `${parsedEmail.subject || ''}\n${parsedEmail.body || ''}\n${parsedEmail.sender || ''}\n${parsedEmail.rawSnippet || ''}`;
+  const preprocessed = preprocessText(fullText);
+
+  // 1. Extract linguistic indicators (for supplementary explainability)
+  const indicators = extractTextualIndicators(fullText);
+
+  // 2. Query Genuine Machine Learning Model
+  let mlResult = options.mlResult;
+  if (!mlResult && typeof fetch !== 'undefined') {
+    mlResult = await queryMLPrediction(fullText);
+  }
+
+  const isMlAvailable = Boolean(
+    mlResult && 
+    mlResult.status === 'SUCCESS' && 
+    typeof mlResult.phishing_probability === 'number' &&
+    mlResult.prediction !== 'UNAVAILABLE'
+  );
+
+  let probability = null;
+  let prediction = 'UNAVAILABLE';
+  let modelName = 'TF-IDF + Logistic Regression';
+  let topFeatures = [];
+  let confidence = 0;
+
+  if (isMlAvailable) {
+    probability = Math.round(mlResult.phishing_probability * 100);
+    prediction = String(mlResult.prediction).toUpperCase();
+    modelName = mlResult.model || 'TF-IDF + Logistic Regression';
+    topFeatures = mlResult.top_features || [];
+    confidence = Math.round((mlResult.confidence || Math.max(mlResult.phishing_probability, mlResult.legitimate_probability || 0.8)) * 100);
+  } else if (options.fallbackToHeuristic) {
+    // Optional standalone fallback for node test environments when ML service is offline
+    let rawScore = 0;
+    indicators.forEach(ind => { rawScore += ind.weight; });
+    const subjectLower = (parsedEmail.subject || '').toLowerCase();
+    if (subjectLower.includes('urgent') || subjectLower.includes('wire') || subjectLower.includes('mandatory')) {
+      rawScore += 12;
+    }
+    probability = Math.min(98, Math.max(8, Math.round((rawScore / 110) * 100)));
+    prediction = probability >= 50 ? 'PHISHING' : 'LEGITIMATE';
+    confidence = indicators.length >= 3 ? 94 : indicators.length >= 1 ? 82 : 70;
+  }
+
+  const keyTokens = topFeatures.length > 0 
+    ? topFeatures.map(f => f.term) 
+    : indicators.map(i => i.token);
+
+  return {
+    isMlAvailable,
+    prediction, // 'PHISHING' | 'LEGITIMATE' | 'UNAVAILABLE'
+    phishingProbability: probability, // Integer 0-100 or null if UNAVAILABLE
+    phishing_probability: isMlAvailable ? mlResult.phishing_probability : null,
+    legitimate_probability: isMlAvailable ? mlResult.legitimate_probability : null,
+    model: modelName,
+    topFeatures, // Real TF-IDF terms with model coefficients & impacts
     confidence,
-    status: probability >= 75 ? 'HIGH RISK' : probability >= 40 ? 'SUSPICIOUS' : 'LOW RISK',
+    status: isMlAvailable 
+      ? (probability >= 70 ? 'HIGH RISK' : probability >= 40 ? 'SUSPICIOUS' : 'LOW RISK') 
+      : 'UNAVAILABLE',
     detectedIndicators: indicators,
     keyTokens,
     totalIndicatorsFound: indicators.length,
-    narrative: indicators.length > 0
-      ? `AI threat detection identified ${indicators.length} high-confidence adversarial text markers across ${indicators.map(i => i.category).filter((v, i, a) => a.indexOf(v) === i).join(', ')}.`
-      : 'No high-risk coercive or credential-harvesting linguistic patterns detected in email body.'
+    narrative: isMlAvailable
+      ? `Real machine learning model (${modelName}) classified this email as ${prediction} with ${probability}% threat probability. Identified ${topFeatures.length} salient TF-IDF predictive features.`
+      : 'AI Prediction: UNAVAILABLE (ML inference service offline or unreachable). Proceeding with remaining multi-layer forensic evidence.'
   };
 }

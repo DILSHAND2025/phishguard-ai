@@ -41,30 +41,42 @@ export function calculateEvidenceFusion({
   let totalScore = 0;
 
   // 1. AI / NLP Analysis Layer (Max 25 pts)
-  const aiProb = aiThreat?.phishingProbability || 10;
-  const aiScore = Math.min(weights.aiNlp, Math.round((aiProb / 100) * weights.aiNlp));
+  let aiScore = 0;
+  const isMlAvailable = typeof aiThreat?.phishingProbability === 'number';
+  const aiProb = isMlAvailable ? aiThreat.phishingProbability : null;
+
+  if (isMlAvailable) {
+    aiScore = Math.min(weights.aiNlp, Math.round((aiProb / 100) * weights.aiNlp));
+  } else {
+    // When ML is unavailable, award 0 points and clearly indicate UNAVAILABLE status
+    aiScore = 0;
+  }
   totalScore += aiScore;
 
   const aiEvidenceList = [];
-  if (aiThreat?.detectedIndicators?.length > 0) {
-    aiEvidenceList.push(`Detected ${aiThreat.detectedIndicators.length} linguistic markers (${aiThreat.keyTokens.slice(0, 4).join(', ')})`);
-  }
-  if (aiProb >= 70) {
-    aiEvidenceList.push(`High AI model phishing probability of ${aiProb}%`);
+  if (isMlAvailable) {
+    aiEvidenceList.push(`ML Model (${aiThreat.model || 'TF-IDF + Logistic Regression'}) predicted ${aiThreat.prediction || 'THREAT'} with ${aiProb}% probability`);
+    if (aiThreat.topFeatures?.length > 0) {
+      aiEvidenceList.push(`Salient TF-IDF features: ${aiThreat.topFeatures.slice(0, 3).map(f => `"${f.term}"`).join(', ')}`);
+    } else if (aiThreat.keyTokens?.length > 0) {
+      aiEvidenceList.push(`Key tokens: ${aiThreat.keyTokens.slice(0, 4).join(', ')}`);
+    }
+  } else {
+    aiEvidenceList.push('AI Prediction: UNAVAILABLE (Inference service offline). 0/25 points allocated');
   }
 
   factors.push({
     id: 'ai-nlp-analysis',
     category: 'AI / NLP Analysis',
-    name: 'Natural Language & Linguistic Threat Markers',
+    name: 'Real ML Model (TF-IDF + Logistic Regression)',
     points: aiScore,
     maxPoints: weights.aiNlp,
-    severity: aiScore >= 18 ? 'CRITICAL' : aiScore >= 10 ? 'HIGH' : 'LOW',
-    status: aiScore >= 10 ? 'FLAGGED' : 'PASS',
-    evidence: aiEvidenceList.length > 0 
-      ? aiEvidenceList.join('. ') + '.'
-      : 'No high-threat linguistic tokens detected by NLP classifier.',
-    reasons: aiThreat?.detectedIndicators?.map(ind => `⚠️ ${ind.category}: "${ind.token}" (${ind.explanation})`) || []
+    severity: !isMlAvailable ? 'LOW' : aiScore >= 18 ? 'CRITICAL' : aiScore >= 10 ? 'HIGH' : 'LOW',
+    status: !isMlAvailable ? 'UNAVAILABLE' : aiScore >= 10 ? 'FLAGGED' : 'PASS',
+    evidence: aiEvidenceList.join('. ') + '.',
+    reasons: isMlAvailable && aiThreat?.topFeatures?.length > 0
+      ? aiThreat.topFeatures.slice(0, 5).map(f => `🤖 ML TF-IDF Term: "${f.term}" (weight: ${f.weight > 0 ? '+' : ''}${f.weight}, impact: ${f.impact})`)
+      : aiThreat?.detectedIndicators?.map(ind => `⚠️ ${ind.category}: "${ind.token}" (${ind.explanation})`) || []
   });
 
   // 2. Email Header Forensics Layer (Max 20 pts)

@@ -346,31 +346,101 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
             })}
           </div>
 
-          {/* AI NLP Linguistic Attribution Box */}
-          {aiThreat?.detectedIndicators?.length > 0 && (
-            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-[#0d162a] to-[#080d19] border border-cyan-500/30 font-mono text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-cyan-300 font-bold flex items-center gap-1.5">
-                  <Cpu className="w-4 h-4" />
-                  AI Model Linguistic Attribution Tokens:
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {aiThreat.detectedIndicators.length} Tokens Identified
+          {/* AI Threat Analysis (Real ML TF-IDF + Logistic Regression) Card */}
+          <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-[#0b1424] via-[#09101d] to-[#060a14] border border-cyan-500/40 font-mono text-xs space-y-3 shadow-[0_0_20px_rgba(6,182,212,0.1)]">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
+                  <Brain className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider block">Real Machine Learning Model</span>
+                  <h3 className="text-xs font-bold text-white tracking-wide">AI THREAT ANALYSIS</h3>
+                </div>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                aiThreat?.prediction === 'PHISHING' 
+                  ? 'bg-red-950/80 text-red-300 border-red-500/40' 
+                  : aiThreat?.prediction === 'LEGITIMATE'
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}>
+                {aiThreat?.prediction || 'UNAVAILABLE'}
+              </span>
+            </div>
+
+            {/* Model Telemetry Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
+              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">Prediction:</span>
+                <span className={`font-bold mt-0.5 block ${
+                  aiThreat?.prediction === 'PHISHING' ? 'text-red-400' : aiThreat?.prediction === 'LEGITIMATE' ? 'text-emerald-400' : 'text-slate-400'
+                }`}>
+                  {aiThreat?.prediction || 'UNAVAILABLE'}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {aiThreat.detectedIndicators.map((ind, idx) => (
-                  <span 
-                    key={idx} 
-                    className="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-300"
-                    title={ind.explanation}
-                  >
-                    <strong className="text-amber-300">"{ind.token}"</strong> <span className="text-slate-500">({ind.category})</span>
-                  </span>
-                ))}
+
+              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">Probability:</span>
+                <span className="font-bold text-cyan-300 mt-0.5 block">
+                  {typeof aiThreat?.phishingProbability === 'number' ? `${aiThreat.phishingProbability}%` : 'UNAVAILABLE'}
+                </span>
+              </div>
+
+              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
+                <span className="text-[10px] text-slate-500 block">Model Architecture:</span>
+                <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={aiThreat?.model || 'TF-IDF + Logistic Regression'}>
+                  {aiThreat?.model || 'TF-IDF + Logistic Regression'}
+                </span>
               </div>
             </div>
-          )}
+
+            {/* Salient TF-IDF Terms Learned by Model */}
+            {aiThreat?.topFeatures?.length > 0 ? (
+              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                <div className="flex items-center justify-between text-[10.5px]">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                    Salient Learned TF-IDF Predictive Terms:
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Feature Weights Derived from Training
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {aiThreat.topFeatures.map((feat, idx) => (
+                    <span 
+                      key={idx}
+                      className={`px-2 py-0.5 rounded text-[10px] border ${
+                        feat.indicator === 'PHISHING' 
+                          ? 'bg-red-950/40 border-red-500/30 text-red-300' 
+                          : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                      }`}
+                      title={`TF-IDF: ${feat.tfidf} | Weight: ${feat.weight} | Impact: ${feat.impact}`}
+                    >
+                      <strong>"{feat.term}"</strong> <span className="text-[9px] opacity-75">({feat.weight > 0 ? `+${feat.weight}` : feat.weight})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : aiThreat?.detectedIndicators?.length > 0 ? (
+              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                <span className="text-slate-400 text-[10.5px] block">Linguistic Pattern Indicators:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {aiThreat.detectedIndicators.map((ind, idx) => (
+                    <span key={idx} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-amber-300">
+                      "{ind.token}" ({ind.category})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Forensic Non-Absolute Disclaimer */}
+            <div className="pt-1 text-[10px] text-slate-500 font-sans italic border-t border-slate-800/60">
+              * Note: Machine learning threat analysis generates probabilistic lexical predictions based on statistical TF-IDF word distributions and does not constitute absolute proof on its own.
+            </div>
+          </div>
 
         </div>
 

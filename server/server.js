@@ -86,6 +86,78 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // ML Prediction Endpoint: POST /predict or /api/ml/predict
+  if ((pathname === '/predict' || pathname === '/api/ml/predict' || pathname === '/api/predict') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const text = parsed.text || '';
+
+        // 1. Try FastAPI ML Microservice on port 8000
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2500);
+          const mlRes = await fetch('http://127.0.0.1:8000/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (mlRes.ok) {
+            const data = await mlRes.json();
+            return sendJson(res, 200, data);
+          }
+        } catch {
+          // FastAPI microservice offline or timeout, continue to CLI fallback
+        }
+
+        // 2. Direct CLI fallback using Python ml/predict.py
+        try {
+          const { execFile } = await import('node:child_process');
+          execFile('python', ['ml/predict.py', '--text', text], { timeout: 3500 }, (err, stdout, stderr) => {
+            if (err || stderr) {
+              return sendJson(res, 503, {
+                prediction: "UNAVAILABLE",
+                phishing_probability: null,
+                legitimate_probability: null,
+                model: "TF-IDF + Logistic Regression",
+                status: "UNAVAILABLE",
+                error: "ML inference service unavailable"
+              });
+            }
+            try {
+              const result = JSON.parse(stdout.trim());
+              return sendJson(res, 200, result);
+            } catch {
+              return sendJson(res, 500, {
+                prediction: "UNAVAILABLE",
+                status: "UNAVAILABLE",
+                error: "Malformed ML output"
+              });
+            }
+          });
+          return;
+        } catch {
+          // fallback
+        }
+
+        return sendJson(res, 503, {
+          prediction: "UNAVAILABLE",
+          phishing_probability: null,
+          legitimate_probability: null,
+          model: "TF-IDF + Logistic Regression",
+          status: "UNAVAILABLE"
+        });
+      } catch {
+        return sendJson(res, 400, { error: 'Invalid JSON request payload' });
+      }
+    });
+    return;
+  }
+
   // GeoIP endpoint
   if (pathname === '/api/geoip') {
     const ip = parsedUrl.query.ip;
