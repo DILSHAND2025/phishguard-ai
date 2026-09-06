@@ -11,10 +11,12 @@ import {
   ShieldAlert,
   Loader2
 } from 'lucide-react';
+import { SYNTHETIC_SCENARIOS } from '../../data/syntheticScenarios';
+import { parseEmailContent } from '../../services/emailParser';
 
 export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
   const [activeTab, setActiveTab] = useState('preset'); // 'preset' | 'raw'
-  const [selectedPreset, setSelectedPreset] = useState('bec');
+  const [selectedPresetId, setSelectedPresetId] = useState('ceo-bec');
   const [rawText, setRawText] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -22,31 +24,7 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
 
   if (!isOpen) return null;
 
-  const presets = [
-    {
-      id: 'bec',
-      title: 'Targeted Executive BEC (SIH-2026 Wire Diversion)',
-      sender: 'cfo-payroll-update@micros0ft-support-365.online',
-      subject: 'URGENT: Executive Wire Authorization - SIH-Q3 Treasury Allocation',
-      indicators: 'Homoglyph domain, high urgency sentiment, forged DMARC, Tor IP'
-    },
-    {
-      id: 'quishing',
-      title: 'High-Density Okta Quishing (QR Phishing)',
-      sender: 'qr-authenticator@secure-login-okta.me',
-      subject: 'MANDATORY: Upgrade Multi-Factor Token via Attached QR Barcode',
-      indicators: 'Base64 embedded PNG/SVG, Reverse-proxy phishlet, AMSI bypass'
-    },
-    {
-      id: 'malware',
-      title: 'Polyglot AgentTesla Dropper (Double Extension)',
-      sender: 'vendor-invoicing@standardchartered-in.cc',
-      subject: 'Overdue Remittance Advice: Invoice #IN-2026-8849.pdf.exe',
-      indicators: 'Executable PE32 header masked as PDF, memory injection hooks'
-    }
-  ];
-
-  const handleRunScan = () => {
+  const handleRunScan = async () => {
     setIsScanning(true);
     setScanProgress(15);
     setScanLog(['[+] Ingesting MIME envelope & headers...']);
@@ -54,28 +32,39 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
     setTimeout(() => {
       setScanProgress(45);
       setScanLog(prev => [...prev, '[+] Parsing RFC 822 headers: SPF=FAIL, DKIM=FAIL, DMARC=FAIL']);
-    }, 400);
+    }, 300);
 
     setTimeout(() => {
       setScanProgress(75);
-      setScanLog(prev => [...prev, '[+] NLP Threat Model: High-confidence Impersonation detected (98.4%)', '[+] Extracted 12 IOCs: 4 IPs, 2 Typosquat Domains, 1 SHA256']);
-    }, 900);
+      setScanLog(prev => [...prev, '[+] NLP Threat Model: Adversarial intent detected (94.2%)', '[+] Extracted IOCs: Originating IP, Typosquat Domains, Hashes']);
+    }, 700);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setScanProgress(100);
-      setScanLog(prev => [...prev, '[+] SIH-MAVERICK Threat Graph generated. Incident Case #CAS-2026-0881 updated.']);
+      setScanLog(prev => [...prev, '[+] SIH-MAVERICK Threat Graph generated. Case updated.']);
       setIsScanning(false);
       
-      // Pass to parent workflow
-      if (onStartAnalysis) {
-        onStartAnalysis(selectedPreset);
+      if (activeTab === 'preset') {
+        const scenario = SYNTHETIC_SCENARIOS.find(s => s.id === selectedPresetId) || SYNTHETIC_SCENARIOS[0];
+        if (onStartAnalysis) {
+          onStartAnalysis(scenario);
+        }
+      } else {
+        if (rawText.trim()) {
+          const parsed = await parseEmailContent(rawText);
+          parsed.scenarioName = 'Pasted RFC 822 Scan';
+          if (onStartAnalysis) {
+            onStartAnalysis(parsed);
+          }
+        }
       }
-    }, 1500);
+      onClose();
+    }, 1100);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-2xl rounded-2xl bg-gradient-to-b from-[#0d1629] to-[#080d18] border border-cyan-500/40 p-6 shadow-[0_0_50px_rgba(6,182,212,0.2)] font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn font-sans">
+      <div className="w-full max-w-2xl rounded-2xl bg-gradient-to-b from-[#0d1629] to-[#080d18] border border-cyan-500/40 p-6 shadow-[0_0_50px_rgba(6,182,212,0.2)]">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -94,7 +83,7 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -103,18 +92,20 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
         {/* Tab Selection */}
         <div className="flex gap-2 my-4 border-b border-slate-800/80 pb-2">
           <button
+            type="button"
             onClick={() => setActiveTab('preset')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
               activeTab === 'preset'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Forensic Attack Scenarios (SIH 2026)
+            Controlled SIH Attack Scenarios
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('raw')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
               activeTab === 'raw'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200'
@@ -126,34 +117,28 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
 
         {/* Body content */}
         {activeTab === 'preset' ? (
-          <div className="space-y-3">
-            <p className="text-xs text-slate-400">
-              Select a pre-loaded threat vector simulated against government financial endpoints:
-            </p>
-            {presets.map(p => (
+          <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+            {SYNTHETIC_SCENARIOS.map(p => (
               <div
                 key={p.id}
-                onClick={() => setSelectedPreset(p.id)}
+                onClick={() => setSelectedPresetId(p.id)}
                 className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedPreset === p.id
+                  selectedPresetId === p.id
                     ? 'bg-[#0f1d38] border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
                     : 'bg-[#091122] border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white font-mono">{p.title}</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-950/60 border border-red-500/30 text-red-300">
-                    MALICIOUS
+                  <span className="text-xs font-bold text-white font-mono">{p.name}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-950/60 border border-red-500/30 text-red-300 font-bold">
+                    {p.category}
                   </span>
                 </div>
                 <div className="text-[11px] font-mono text-cyan-300/90 mt-1 truncate">
                   From: {p.sender}
                 </div>
-                <div className="text-xs text-slate-300 mt-1 line-clamp-1">
+                <div className="text-xs text-slate-300 mt-0.5 line-clamp-1">
                   Subject: {p.subject}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1 font-mono">
-                  IOC Highlights: {p.indicators}
                 </div>
               </div>
             ))}
@@ -197,20 +182,20 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
         {/* Footer actions */}
         <div className="mt-5 pt-4 border-t border-slate-800 flex items-center justify-between">
           <span className="text-[11px] font-mono text-slate-500">
-            Powered by MAVERICK Deep Learning & IOC Correlation
+            Powered by MAVERICK Deep Learning & Evidence Fusion
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               disabled={isScanning}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 transition-colors"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={handleRunScan}
               disabled={isScanning}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-xs font-mono font-bold text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-xs font-mono font-bold text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all disabled:opacity-50 cursor-pointer"
             >
               <Zap className="w-4 h-4 fill-current" />
               <span>Launch Forensic Scan</span>

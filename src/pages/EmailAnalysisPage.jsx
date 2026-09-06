@@ -7,7 +7,6 @@ import {
   AlertTriangle, 
   ArrowRight, 
   ShieldAlert, 
-  Play, 
   Zap, 
   Copy, 
   Check, 
@@ -15,60 +14,21 @@ import {
   Mail, 
   Globe, 
   Paperclip, 
-  FileText, 
   Terminal, 
   Cpu, 
-  Layers, 
   Activity, 
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  ShieldCheck,
+  ShieldX,
+  FileText,
+  Radio,
+  ExternalLink
 } from 'lucide-react';
+import { parseEmailContent } from '../services/emailParser';
+import { SYNTHETIC_SCENARIOS } from '../data/syntheticScenarios';
 
-const DEMO_EMAIL_DATA = {
-  sender: 'Satya N. (Executive Desk) <cfo-finance-update@internal-corp-portal.online>',
-  recipient: 'treasury-controller@gov-organization.in',
-  subject: 'URGENT: Executive Wire Authorization - SIH-Q3 Allocation',
-  date: 'Fri, 05 Sep 2026 11:41:50 +0530 (IST)',
-  spfResult: 'SOFTFAIL (IP 185.220.101.45 not authorized)',
-  dkimResult: 'FAIL (Invalid Cryptographic Signature)',
-  dmarcResult: 'FAIL (Policy: Reject / Quarantine Enforced)',
-  urls: [
-    'http://internal-corp-portal.online/auth-portal/wire-release',
-    'http://auth.secure-sso-verify.me/token'
-  ],
-  ips: [
-    '185.220.101.45 (AS9009 - Tor Relay Node, Germany)',
-    '45.154.255.82 (AS202425 - Reverse Proxy, Netherlands)',
-    '194.26.29.110 (AS48693 - Relay Endpoint, Romania)'
-  ],
-  attachments: [
-    {
-      filename: 'Wire_Remittance_Directive.pdf.exe',
-      size: '242.6 KB',
-      flag: 'Double Extension / Obfuscated PE32 Executable'
-    }
-  ],
-  rawSnippet: `Delivered-To: treasury-controller@gov-organization.in
-Received: by 2002:a05:6512:2184 with SMTP id p4csp392873;
-        Fri, 5 Sep 2026 11:41:50 +0530 (IST)
-Return-Path: <cfo-finance-update@internal-corp-portal.online>
-Received-SPF: softfail (mail.gov.in: domain of cfo-finance-update@internal-corp-portal.online does not designate 185.220.101.45)
-Authentication-Results: mail.gov.in;
-       dkim=fail (bad signature) header.i=@internal-corp-portal.online;
-       dmarc=fail (p=REJECT sp=REJECT)
-From: "Satya N. (Executive Desk)" <cfo-finance-update@internal-corp-portal.online>
-Reply-To: <external-offshore-treasury@proton.me>
-To: <treasury-controller@gov-organization.in>
-Subject: URGENT: Executive Wire Authorization - SIH-Q3 Allocation
-Date: Fri, 5 Sep 2026 11:41:50 +0530
-Message-ID: <SIH-2026-MIME-8841@internal-corp-portal.online>
-
-Treasury Controller,
-Expedite statutory allocation transfer of INR 4,85,00,000 immediately for critical infrastructure.
-Ministerial Directive bypass applied. Verification documents attached.`
-};
-
-const INITIAL_PIPELINE_STAGES = [
+const PIPELINE_STAGES = [
   { id: 1, name: 'Email Parsing', detail: 'Decoding MIME envelope, headers & boundary structures', duration: '34ms' },
   { id: 2, name: 'Header Forensics', detail: 'SPF, DKIM, DMARC alignment & hop traceroute validation', duration: '48ms' },
   { id: 3, name: 'NLP Threat Analysis', detail: 'Evaluating urgency sentiment, extortion & impersonation tokens', duration: '82ms' },
@@ -79,17 +39,20 @@ const INITIAL_PIPELINE_STAGES = [
   { id: 8, name: 'Risk Scoring', detail: 'Computing multi-factor explainable risk index & confidence level', duration: '38ms' }
 ];
 
-export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
-  const [emailData, setEmailData] = useState(null);
+export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis }) => {
+  const [emailData, setEmailData] = useState(currentAnalysis?.email || null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState('ceo-bec');
   const [isDragActive, setIsDragActive] = useState(false);
   const [showRawHeaders, setShowRawHeaders] = useState(false);
+  const [showRawPasteModal, setShowRawPasteModal] = useState(false);
+  const [pastedRawText, setPastedRawText] = useState('');
   const [copiedRaw, setCopiedRaw] = useState(false);
   
   // Pipeline Analysis State
-  const [analysisState, setAnalysisState] = useState('idle'); // 'idle' | 'analyzing' | 'completed'
+  const [analysisState, setAnalysisState] = useState(currentAnalysis ? 'completed' : 'idle');
   const [activeStageIndex, setActiveStageIndex] = useState(-1);
   const [stageStatuses, setStageStatuses] = useState(
-    INITIAL_PIPELINE_STAGES.map(() => 'pending')
+    PIPELINE_STAGES.map(() => currentAnalysis ? 'completed' : 'pending')
   );
 
   const fileInputRef = useRef(null);
@@ -101,31 +64,64 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
     };
   }, []);
 
-  // Handler for loading demo email
-  const handleUseDemoEmail = (e) => {
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
+  // Update when currentAnalysis changes externally
+  useEffect(() => {
+    if (currentAnalysis?.email) {
+      setEmailData(currentAnalysis.email);
     }
-    setEmailData({ ...DEMO_EMAIL_DATA });
+  }, [currentAnalysis]);
+
+  // Load a synthetic scenario
+  const handleLoadScenario = async (scenarioId) => {
+    setSelectedScenarioId(scenarioId);
+    const scenario = SYNTHETIC_SCENARIOS.find(s => s.id === scenarioId) || SYNTHETIC_SCENARIOS[0];
+    const parsed = await parseEmailContent(scenario.rawSnippet);
+    
+    // Attach known scenario enrichment fields
+    parsed.scenarioName = scenario.name;
+    parsed.category = scenario.category;
+    parsed.tag = scenario.tag;
+    if (scenario.urls) parsed.urls = scenario.urls;
+    if (scenario.ips) parsed.ips = scenario.ips;
+    if (scenario.attachments) parsed.attachments = scenario.attachments;
+
+    setEmailData(parsed);
     setAnalysisState('idle');
     setActiveStageIndex(-1);
-    setStageStatuses(INITIAL_PIPELINE_STAGES.map(() => 'pending'));
+    setStageStatuses(PIPELINE_STAGES.map(() => 'pending'));
   };
 
   const handleBrowseClick = (e) => {
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  // Handle actual file upload (.eml or .txt)
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const text = event.target?.result;
+        if (typeof text === 'string') {
+          const parsed = await parseEmailContent(text, { name: file.name, size: file.size });
+          parsed.scenarioName = `Uploaded: ${file.name}`;
+          parsed.tag = 'REAL INGESTED FILE';
+          setEmailData(parsed);
+          setAnalysisState('idle');
+          setActiveStageIndex(-1);
+          setStageStatuses(PIPELINE_STAGES.map(() => 'pending'));
+        }
+      };
+      reader.readAsText(file);
+    } catch (err) {
+      console.error('Error reading email file:', err);
     }
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      handleUseDemoEmail();
-    }
+    if (file) handleFileUpload(file);
   };
 
   const handleDragOver = (e) => {
@@ -141,26 +137,58 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragActive(false);
-    handleUseDemoEmail();
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileUpload(file);
+  };
+
+  const handleApplyPastedRaw = async () => {
+    if (!pastedRawText.trim()) return;
+    const parsed = await parseEmailContent(pastedRawText);
+    parsed.scenarioName = 'Pasted RFC 822 Payload';
+    parsed.tag = 'RAW PASTE';
+    setEmailData(parsed);
+    setShowRawPasteModal(false);
+    setAnalysisState('idle');
+    setActiveStageIndex(-1);
+    setStageStatuses(PIPELINE_STAGES.map(() => 'pending'));
   };
 
   const handleCopyRaw = () => {
-    if (emailData) {
+    if (emailData?.rawSnippet) {
       navigator.clipboard?.writeText(emailData.rawSnippet);
       setCopiedRaw(true);
       setTimeout(() => setCopiedRaw(false), 1500);
     }
   };
 
+  // Run the 8-stage pipeline and call parent handler
   const startAnalysis = () => {
-    if (!emailData) {
-      setEmailData({ ...DEMO_EMAIL_DATA });
+    let targetEmail = emailData;
+    if (!targetEmail) {
+      const defaultScenario = SYNTHETIC_SCENARIOS[0];
+      targetEmail = {
+        sender: defaultScenario.sender,
+        recipient: defaultScenario.recipient,
+        subject: defaultScenario.subject,
+        date: defaultScenario.date,
+        rawSnippet: defaultScenario.rawSnippet,
+        originatingIP: defaultScenario.originatingIP,
+        urls: defaultScenario.urls,
+        ips: defaultScenario.ips,
+        attachments: defaultScenario.attachments,
+        auth: {
+          spf: { result: 'SOFTFAIL', details: 'Unauthorized IP' },
+          dkim: { result: 'FAIL', details: 'Invalid signature' },
+          dmarc: { result: 'FAIL', details: 'Quarantine policy' }
+        }
+      };
+      setEmailData(targetEmail);
     }
     
     setAnalysisState('analyzing');
     setActiveStageIndex(0);
     
-    const newStatuses = INITIAL_PIPELINE_STAGES.map(() => 'pending');
+    const newStatuses = PIPELINE_STAGES.map(() => 'pending');
     newStatuses[0] = 'processing';
     setStageStatuses(newStatuses);
 
@@ -169,7 +197,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
 
     timerRef.current = setInterval(() => {
       currentStep++;
-      if (currentStep < INITIAL_PIPELINE_STAGES.length) {
+      if (currentStep < PIPELINE_STAGES.length) {
         setActiveStageIndex(currentStep);
         setStageStatuses(prev => {
           const updated = [...prev];
@@ -179,23 +207,33 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
         });
       } else {
         clearInterval(timerRef.current);
-        setStageStatuses(INITIAL_PIPELINE_STAGES.map(() => 'completed'));
-        setActiveStageIndex(INITIAL_PIPELINE_STAGES.length);
+        setStageStatuses(PIPELINE_STAGES.map(() => 'completed'));
+        setActiveStageIndex(PIPELINE_STAGES.length);
         setAnalysisState('completed');
+
+        // Pass parsed email to parent state to execute evidence fusion & case generation
+        if (onRunAnalysis) {
+          onRunAnalysis(targetEmail);
+        }
       }
-    }, 420);
+    }, 380);
   };
 
   const progressPercentage = analysisState === 'completed'
     ? 100
     : analysisState === 'analyzing'
-      ? Math.round(((activeStageIndex + 0.5) / INITIAL_PIPELINE_STAGES.length) * 100)
+      ? Math.round(((activeStageIndex + 0.5) / PIPELINE_STAGES.length) * 100)
       : 0;
+
+  // Active risk scores from parent fusion engine or defaults
+  const riskScore = currentAnalysis?.fusion?.threatScore || 92;
+  const riskLevel = currentAnalysis?.fusion?.riskLevel || 'HIGH';
+  const aiConfidence = currentAnalysis?.aiThreat?.confidence || 92;
 
   return (
     <div className="space-y-6 pb-12 font-sans">
       
-      {/* Hidden file input for .eml browse */}
+      {/* Hidden file input for real .eml upload */}
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -210,13 +248,13 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
           <div>
             <div className="flex items-center gap-2 text-cyan-400 text-xs font-mono mb-1">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              STAGE 02 OF 08 • EMAIL INGESTION & PIPELINE
+              STAGE 01 & 02 OF 08 • EMAIL INGESTION & HEADER FORENSICS
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
               <span>Suspicious Email Ingestion & Analysis Engine</span>
             </h1>
             <p className="text-xs text-slate-300 mt-1 max-w-3xl">
-              Upload raw .eml files or load synthetic samples to trigger the 8-stage automated threat verification pipeline.
+              Ingest raw <strong className="text-cyan-300">.eml files</strong>, RFC 822 headers, or select controlled SIH synthetic scenarios to execute the 8-stage automated threat verification pipeline.
             </p>
           </div>
 
@@ -228,32 +266,53 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
         </div>
       </div>
 
-      {/* Section 1: .eml Email Upload & Action Zone */}
+      {/* Section 1: Ingestion Zone & 5 Controlled Synthetic Presets */}
       <div className="rounded-xl bg-[#09101e] border border-slate-800/90 p-5 shadow-lg space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <UploadCloud className="w-5 h-5 text-cyan-400" />
             <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-100">
-              .eml Email Upload & Ingestion Controls
+              Email Ingestion Controls
             </h2>
           </div>
           <span className="text-[11px] font-mono text-slate-400">
-            Accepts RFC 822 / MIME (.eml, .txt)
+            Accepts RFC 822 / MIME (.eml, .txt) & Untrusted Payloads
           </span>
         </div>
 
-        {/* Primary Action Buttons Bar */}
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-[#060a14] border border-slate-800">
-          <button
-            type="button"
-            id="btn-use-demo-email"
-            onClick={handleUseDemoEmail}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-mono font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer active:scale-95"
-          >
-            <Zap className="w-4 h-4 fill-current text-cyan-200" />
-            <span>Use Demo Email</span>
-          </button>
+        {/* 5 SIH Controlled Synthetic Scenarios Selector */}
+        <div className="space-y-2">
+          <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block font-bold">
+            Controlled SIH Demo Scenarios (One-Click Ingest):
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {SYNTHETIC_SCENARIOS.map(scenario => {
+              const isSelected = selectedScenarioId === scenario.id;
+              return (
+                <button
+                  key={scenario.id}
+                  type="button"
+                  onClick={() => handleLoadScenario(scenario.id)}
+                  className={`p-2.5 rounded-lg border text-left font-mono transition-all cursor-pointer ${
+                    isSelected 
+                      ? 'bg-cyan-950/80 border-cyan-400 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' 
+                      : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold truncate text-cyan-300">{scenario.name}</span>
+                  </div>
+                  <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 block truncate">
+                    {scenario.category}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
+        {/* Upload & Paste Action Bar */}
+        <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg bg-[#060a14] border border-slate-800">
           <button
             type="button"
             id="btn-browse-file"
@@ -261,52 +320,96 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0d1c38] hover:bg-[#122850] border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold transition-all shadow-sm cursor-pointer"
           >
             <FolderOpen className="w-4 h-4 text-cyan-400" />
-            <span>Browse .eml File</span>
+            <span>Upload .eml File</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowRawPasteModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono transition-all cursor-pointer"
+          >
+            <FileCode className="w-4 h-4 text-slate-400" />
+            <span>Paste Raw RFC Headers</span>
           </button>
 
           <span className="text-[11px] font-mono text-slate-400 ml-auto hidden md:inline">
-            Click <strong className="text-cyan-300 font-semibold">"Use Demo Email"</strong> to populate simulated attack telemetry
+            Attachments processed safely: <strong className="text-emerald-400 font-semibold">Strictly quarantined / No binary execution</strong>
           </span>
         </div>
 
-        {/* Drag and drop area (dedicated target) */}
+        {/* Drag and drop area */}
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onClick={handleBrowseClick}
           className={`rounded-xl border-2 border-dashed p-6 text-center transition-all duration-200 cursor-pointer ${
             isDragActive
               ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
               : 'border-slate-800 hover:border-cyan-500/40 bg-[#060a14]/60'
           }`}
-          onClick={handleBrowseClick}
         >
           <div className="flex flex-col items-center justify-center space-y-2">
             <UploadCloud className="w-8 h-8 text-cyan-400 opacity-80" />
             <p className="text-xs font-medium text-slate-300">
-              Drag and drop an <span className="text-cyan-300 font-mono font-bold">.eml</span> file here, or click to browse
+              Drag and drop an <span className="text-cyan-300 font-mono font-bold">.eml</span> or <span className="text-cyan-300 font-mono font-bold">.txt</span> file here, or click to browse
             </p>
-            <p className="text-[11px] text-slate-500">
-              Automatic parser extracts headers, routing hops, URLs, IPs, and payload attachments
+            <p className="text-[11px] text-slate-500 font-mono">
+              Automatic RFC 822 parser extracts headers, routing hops, URLs, IPs, and cryptographic attachment hashes
             </p>
           </div>
         </div>
       </div>
 
-      {/* Section 2: Display Demo Email Information */}
+      {/* Raw Paste Modal */}
+      {showRawPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-[#09101e] border border-cyan-500/40 p-6 space-y-4 font-mono">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <FileCode className="w-4 h-4 text-cyan-400" />
+              <span>Paste RFC 822 Email Headers & Body</span>
+            </h3>
+            <textarea
+              rows={8}
+              value={pastedRawText}
+              onChange={(e) => setPastedRawText(e.target.value)}
+              placeholder="Delivered-To: ...&#10;From: ...&#10;Subject: ...&#10;Received: from ...&#10;&#10;Email body..."
+              className="w-full p-3 bg-[#050810] border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRawPasteModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyPastedRaw}
+                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs text-white font-bold"
+              >
+                Parse Ingested Headers
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Section 2: Ingested Email Telemetry & Header Forensics */}
       {emailData ? (
         <div id="email-telemetry-container" className="rounded-xl bg-[#09101e] border border-cyan-500/50 p-5 sm:p-6 shadow-[0_0_25px_rgba(6,182,212,0.15)] space-y-5">
           
-          {/* Header with DEMO EMAIL LOADED */}
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2.5">
               <Mail className="w-5 h-5 text-cyan-400" />
               <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-white">
-                Ingested Email Telemetry
+                Ingested Email Telemetry & Forensics
               </h2>
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-extrabold shadow-[0_0_10px_rgba(6,182,212,0.3)] flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span>DEMO EMAIL LOADED</span>
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-extrabold shadow-[0_0_10px_rgba(6,182,212,0.3)] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span>{emailData.tag || 'INGESTED'}</span>
               </span>
             </div>
 
@@ -326,12 +429,12 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
             
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-1">
-              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Sender</span>
+              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Sender (From)</span>
               <div className="text-slate-200 font-medium break-all">{emailData.sender}</div>
             </div>
 
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-1">
-              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Recipient</span>
+              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Recipient (To)</span>
               <div className="text-cyan-300 font-medium break-all">{emailData.recipient}</div>
             </div>
 
@@ -341,43 +444,133 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             </div>
 
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-1">
-              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Date</span>
+              <span className="text-[10px] uppercase text-slate-500 font-semibold block">Date / Timestamp</span>
               <div className="text-slate-300">{emailData.date}</div>
             </div>
 
           </div>
 
-          {/* Authentication Protocol Results: SPF, DKIM, DMARC */}
-          <div className="space-y-2 font-mono text-xs">
-            <span className="text-[11px] uppercase text-slate-400 font-bold tracking-wider block">
-              Authentication Protocol Diagnostics
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/40 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">SPF Result</span>
-                  <span className="font-bold text-red-400">{emailData.spfResult}</span>
-                </div>
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 ml-2" />
-              </div>
-
-              <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/40 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">DKIM Result</span>
-                  <span className="font-bold text-red-400">{emailData.dkimResult}</span>
-                </div>
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 ml-2" />
-              </div>
-
-              <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/40 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">DMARC Result</span>
-                  <span className="font-bold text-red-400">{emailData.dmarcResult}</span>
-                </div>
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 ml-2" />
-              </div>
+          {/* Phase 2: Email Header Forensics & Alignment Diagnostics */}
+          <div className="space-y-3 font-mono text-xs border-t border-slate-800 pt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase text-slate-400 font-bold tracking-wider flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-cyan-400" />
+                Email Header Forensics & Cryptographic Alignment
+              </span>
+              <span className="text-[10px] text-slate-500">
+                RFC 7208 / RFC 6376 / RFC 7489
+              </span>
             </div>
+
+            {/* Authentication Protocol Diagnostic Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              
+              {/* SPF Result */}
+              <div className={`p-3 rounded-lg border ${
+                (emailData.auth?.spf?.result === 'PASS') 
+                  ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
+                  : (emailData.auth?.spf?.result === 'SOFTFAIL')
+                    ? 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+                    : 'bg-red-950/30 border-red-500/40 text-red-300'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">SPF Verification</span>
+                  <span className="font-extrabold text-xs">
+                    {emailData.auth?.spf?.result || (emailData.spfResult ? emailData.spfResult.split(' ')[0] : 'UNKNOWN')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 line-clamp-2">
+                  {emailData.auth?.spf?.details || emailData.spfResult || 'Sender IP not authorized in domain SPF records'}
+                </p>
+              </div>
+
+              {/* DKIM Result */}
+              <div className={`p-3 rounded-lg border ${
+                (emailData.auth?.dkim?.result === 'PASS') 
+                  ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-red-950/30 border-red-500/40 text-red-300'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">DKIM Cryptographic Signature</span>
+                  <span className="font-extrabold text-xs">
+                    {emailData.auth?.dkim?.result || (emailData.dkimResult ? emailData.dkimResult.split(' ')[0] : 'UNKNOWN')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 line-clamp-2">
+                  {emailData.auth?.dkim?.details || emailData.dkimResult || 'Cryptographic body signature mismatch or missing'}
+                </p>
+              </div>
+
+              {/* DMARC Result */}
+              <div className={`p-3 rounded-lg border ${
+                (emailData.auth?.dmarc?.result === 'PASS') 
+                  ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-red-950/30 border-red-500/40 text-red-300'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">DMARC Policy Alignment</span>
+                  <span className="font-extrabold text-xs">
+                    {emailData.auth?.dmarc?.result || (emailData.dmarcResult ? emailData.dmarcResult.split(' ')[0] : 'UNKNOWN')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 line-clamp-2">
+                  {emailData.auth?.dmarc?.details || emailData.dmarcResult || 'Domain alignment mandates quarantine or rejection'}
+                </p>
+              </div>
+
+            </div>
+
+            {/* Mismatch Indicators with Forensic Explanations */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              
+              <div className={`p-3 rounded-lg border flex items-start justify-between gap-2 ${
+                emailData.replyToMismatch
+                  ? 'bg-amber-950/20 border-amber-500/40 text-amber-300'
+                  : 'bg-[#060a14] border-slate-800 text-slate-300'
+              }`}>
+                <div>
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">From vs Reply-To Alignment</span>
+                  <div className="font-bold text-xs mt-0.5">
+                    {emailData.replyToMismatch ? '⚠️ MISMATCH DETECTED' : '✅ DOMAIN ALIGNED'}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {emailData.replyToMismatch 
+                      ? 'Replies redirected to an external address differing from sender identity.'
+                      : 'Reply-To points to authorized sender domain.'}
+                  </p>
+                </div>
+                {emailData.replyToMismatch && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 shrink-0">
+                    High BEC Risk
+                  </span>
+                )}
+              </div>
+
+              <div className={`p-3 rounded-lg border flex items-start justify-between gap-2 ${
+                emailData.returnPathMismatch
+                  ? 'bg-amber-950/20 border-amber-500/40 text-amber-300'
+                  : 'bg-[#060a14] border-slate-800 text-slate-300'
+              }`}>
+                <div>
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">From vs Return-Path Alignment</span>
+                  <div className="font-bold text-xs mt-0.5">
+                    {emailData.returnPathMismatch ? '⚠️ MISMATCH DETECTED' : '✅ DOMAIN ALIGNED'}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {emailData.returnPathMismatch 
+                      ? 'Bounce envelope directed to external untrusted routing domain.'
+                      : 'Return-Path matches authenticated sender.'}
+                  </p>
+                </div>
+                {emailData.returnPathMismatch && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 shrink-0">
+                    Spoofing Risk
+                  </span>
+                )}
+              </div>
+
+            </div>
+
           </div>
 
           {/* Detected Entities: URLs, IP Addresses, Attachments */}
@@ -387,15 +580,18 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-300 font-bold text-[11px]">
                 <span className="flex items-center gap-1.5 text-cyan-400">
-                  <Globe className="w-3.5 h-3.5" /> Detected URLs ({emailData.urls.length})
+                  <Globe className="w-3.5 h-3.5" /> Detected URLs ({emailData.urls?.length || 0})
                 </span>
               </div>
               <div className="space-y-1.5">
-                {emailData.urls.map((url, idx) => (
+                {(emailData.urls || []).map((url, idx) => (
                   <div key={idx} className="p-2 rounded bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 break-all font-mono">
                     {url}
                   </div>
                 ))}
+                {(!emailData.urls || emailData.urls.length === 0) && (
+                  <div className="text-[11px] text-slate-500 italic p-2">No external hyperlinks detected</div>
+                )}
               </div>
             </div>
 
@@ -403,11 +599,11 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-300 font-bold text-[11px]">
                 <span className="flex items-center gap-1.5 text-amber-400">
-                  <Activity className="w-3.5 h-3.5" /> Detected IP Addresses ({emailData.ips.length})
+                  <Activity className="w-3.5 h-3.5" /> Detected IPs & Hops ({(emailData.ips || [emailData.originatingIP]).length})
                 </span>
               </div>
               <div className="space-y-1.5">
-                {emailData.ips.map((ip, idx) => (
+                {(emailData.ips || [emailData.originatingIP]).map((ip, idx) => (
                   <div key={idx} className="p-2 rounded bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 break-all font-mono">
                     {ip}
                   </div>
@@ -419,11 +615,11 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-300 font-bold text-[11px]">
                 <span className="flex items-center gap-1.5 text-red-400">
-                  <Paperclip className="w-3.5 h-3.5" /> Attachments ({emailData.attachments.length})
+                  <Paperclip className="w-3.5 h-3.5" /> Attachments ({emailData.attachments?.length || 0})
                 </span>
               </div>
               <div className="space-y-1.5">
-                {emailData.attachments.map((att, idx) => (
+                {(emailData.attachments || []).map((att, idx) => (
                   <div key={idx} className="p-2 rounded bg-slate-900/90 border border-red-500/30 space-y-1">
                     <div className="text-[11px] font-bold text-red-300 break-all font-mono">
                       {att.filename}
@@ -432,8 +628,16 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
                       <span>Size: {att.size}</span>
                       <span className="text-red-400 font-bold">{att.flag}</span>
                     </div>
+                    {att.sha256 && (
+                      <div className="text-[9px] text-slate-500 truncate">
+                        SHA256: {att.sha256}
+                      </div>
+                    )}
                   </div>
                 ))}
+                {(!emailData.attachments || emailData.attachments.length === 0) && (
+                  <div className="text-[11px] text-slate-500 italic p-2">No file attachments enclosed</div>
+                )}
               </div>
             </div>
 
@@ -447,7 +651,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
                 <button
                   type="button"
                   onClick={handleCopyRaw}
-                  className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
+                  className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 cursor-pointer"
                 >
                   {copiedRaw ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedRaw ? 'Copied' : 'Copy'}</span>
@@ -462,7 +666,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
           {/* Analyze Email CTA Button */}
           <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
             <span className="text-xs font-mono text-slate-400">
-              Payload parsed. Ready to execute 8-stage automated forensic analysis.
+              Payload parsed. Ready to execute 8-stage automated forensic analysis pipeline.
             </span>
 
             <button
@@ -475,7 +679,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
               {analysisState === 'analyzing' ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-cyan-200" />
-                  <span>Analyzing Email...</span>
+                  <span>Executing Pipeline...</span>
                 </>
               ) : (
                 <>
@@ -488,7 +692,6 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
 
         </div>
       ) : (
-        /* Empty State prompt with direct action button */
         <div className="rounded-xl bg-[#09101e]/60 border border-slate-800/80 p-6 text-center font-mono text-xs text-slate-400 space-y-3">
           <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 mx-auto flex items-center justify-center text-slate-500">
             <Mail className="w-5 h-5" />
@@ -496,16 +699,16 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
           <div>
             <p className="text-slate-300 font-semibold text-sm">No email currently loaded in parser memory</p>
             <p className="text-slate-500 text-xs mt-1">
-              Click below or use the top button to populate the demo email.
+              Select a scenario above or upload a .eml file to initiate automated analysis.
             </p>
           </div>
           <button
             type="button"
-            onClick={handleUseDemoEmail}
+            onClick={() => handleLoadScenario('ceo-bec')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-xs font-mono font-bold hover:bg-cyan-900 transition-colors cursor-pointer"
           >
             <Zap className="w-4 h-4 fill-current" />
-            <span>Load Demo Email Now</span>
+            <span>Load Demo BEC Scenario</span>
           </button>
         </div>
       )}
@@ -514,13 +717,12 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
       {analysisState !== 'idle' && (
         <div id="pipeline-stages-container" className="rounded-xl bg-[#09101e] border border-slate-800 p-5 shadow-xl space-y-5 font-mono">
           
-          {/* Pipeline Header & Progress */}
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Cpu className="w-5 h-5 text-cyan-400" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  8-Stage Simulated Analysis Pipeline
+                  8-Stage Forensic Analysis Pipeline
                 </h3>
               </div>
               <div className="text-xs text-cyan-300 font-bold flex items-center gap-2">
@@ -531,7 +733,6 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
               </div>
             </div>
 
-            {/* Overall Progress Bar */}
             <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-500 transition-all duration-300 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"
@@ -540,9 +741,8 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             </div>
           </div>
 
-          {/* Grid of 8 Stages with pending -> processing -> completed states */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {INITIAL_PIPELINE_STAGES.map((stage, idx) => {
+            {PIPELINE_STAGES.map((stage, idx) => {
               const status = stageStatuses[idx];
               const isProcessing = status === 'processing';
               const isCompleted = status === 'completed';
@@ -621,10 +821,10 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-white">
-                  Analysis Complete
+                  Automated Forensic Analysis Complete
                 </h3>
                 <p className="text-xs text-slate-400">
-                  All 8 forensic inspection layers finished successfully (Simulated Engine)
+                  Multi-layer evidence fusion, NLP threat classification, and IOC correlation synthesized
                 </p>
               </div>
             </div>
@@ -636,7 +836,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Re-run Analysis</span>
+                <span>Re-run Pipeline</span>
               </button>
             </div>
           </div>
@@ -646,33 +846,33 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
             
             <div className="p-4 rounded-xl bg-[#060a14] border border-red-500/40 text-center space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
-                Risk Level
+                Threat Verdict
               </span>
               <div className="text-2xl font-black text-red-400 flex items-center justify-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse"></span>
-                <span>HIGH</span>
+                <span>{riskLevel}</span>
               </div>
               <span className="text-[10px] text-red-300/80">Immediate Remediation Recommended</span>
             </div>
 
             <div className="p-4 rounded-xl bg-[#060a14] border border-red-500/40 text-center space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
-                Risk Score
+                Evidence Fusion Score
               </span>
               <div className="text-3xl font-black text-white">
-                92<span className="text-base text-slate-400 font-normal"> / 100</span>
+                {riskScore}<span className="text-base text-slate-400 font-normal"> / 100</span>
               </div>
-              <span className="text-[10px] text-slate-400">Critical Threat Threshold Exceeded</span>
+              <span className="text-[10px] text-slate-400">Synthesized from 6 Forensic Layers</span>
             </div>
 
             <div className="p-4 rounded-xl bg-[#060a14] border border-cyan-500/40 text-center space-y-1">
               <span className="text-[11px] uppercase tracking-wider text-slate-400 block">
-                Confidence
+                AI Confidence
               </span>
               <div className="text-3xl font-black text-cyan-300">
-                92%
+                {aiConfidence}%
               </div>
-              <span className="text-[10px] text-slate-400">High Model Certainty</span>
+              <span className="text-[10px] text-slate-400">Calibrated NLP Certainty</span>
             </div>
 
           </div>
@@ -689,7 +889,7 @@ export const EmailAnalysisPage = ({ onViewChange, onInspectEmail }) => {
               onClick={() => onViewChange('analysis-results')}
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-mono font-bold shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all cursor-pointer active:scale-95"
             >
-              <span>View Analysis Results</span>
+              <span>View Explainable Verdict</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

@@ -12,21 +12,24 @@ import {
   ShieldCheck,
   Server,
   Zap,
-  Flame
+  Flame,
+  Settings,
+  LogOut
 } from 'lucide-react';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, step: '01', badge: 'LIVE', badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
   { id: 'email-analysis', label: 'Email Analysis', icon: MailSearch, step: '02', badge: 'INPUT', badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
   { id: 'analysis-results', label: 'Analysis Results', icon: ShieldAlert, step: '03', badge: 'AI SCORE', badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40' },
-  { id: 'ioc-intel', label: 'IOC Intelligence', icon: Binary, step: '04', badge: '48 IOCs', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+  { id: 'ioc-intel', label: 'IOC Intelligence', icon: Binary, step: '04', badge: 'IOCs', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   { id: 'geo-asn', label: 'GeoLocation & ASN', icon: Globe2, step: '05', badge: 'GLOBAL', badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
   { id: 'threat-graph', label: 'Threat Graph', icon: GitFork, step: '06', badge: 'GRAPH', badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
   { id: 'investigation-case', label: 'Investigation Case', icon: Briefcase, step: '07', badge: 'WAR ROOM', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
   { id: 'forensic-report', label: 'Forensic Report', icon: FileText, step: '08', badge: 'SIH CERT', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+  { id: 'settings', label: 'Settings', icon: Settings, step: '⚙️', badge: 'CONFIG', badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40' },
 ];
 
-export const Sidebar = ({ currentView, onViewChange }) => {
+export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout }) => {
   return (
     <aside className="w-64 shrink-0 flex flex-col justify-between border-r border-cyan-950/50 bg-[#060a12] min-h-[calc(100vh-4rem)]">
       
@@ -133,6 +136,37 @@ export const Sidebar = ({ currentView, onViewChange }) => {
             </div>
           </div>
         </div>
+
+        {/* Authenticated User Session Card */}
+        {currentUser && (
+          <div className="p-2.5 rounded-lg bg-[#0a1120] border border-cyan-500/20 space-y-2">
+            <div className="flex items-center gap-2.5">
+              {currentUser.picture ? (
+                <img
+                  src={currentUser.picture}
+                  alt={currentUser.name}
+                  className="w-7 h-7 rounded-full border border-cyan-400 object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-400/60 flex items-center justify-center text-[10px] font-mono font-bold text-cyan-300 shrink-0">
+                  {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'MK'}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold text-slate-200 truncate">{currentUser.name || 'Analyst'}</div>
+                <div className="text-[9px] text-cyan-400/70 font-mono truncate">{currentUser.email || 'Authenticated'}</div>
+              </div>
+            </div>
+            
+            <button
+              onClick={onLogout}
+              className="w-full py-1.5 px-2 rounded bg-slate-900/80 hover:bg-red-950/50 border border-slate-800 hover:border-red-500/40 text-[10px] font-mono text-slate-400 hover:text-red-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <LogOut className="w-3 h-3 text-red-400" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        )}
 
         {/* Version info */}
         <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[9px] font-mono text-slate-600">
