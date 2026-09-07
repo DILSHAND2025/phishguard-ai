@@ -5,8 +5,10 @@ Smart India Hackathon 2026
 
 import os
 import sys
+import re
 import json
 import argparse
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 # pyrefly: ignore [missing-import]
 import joblib
@@ -21,30 +23,59 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-try:
-    from ml.train import clean_text
-except ImportError:
-    from train import clean_text
+def clean_text(text: str) -> str:
+    """
+    Standard text preprocessing pipeline:
+    - Lowercasing
+    - Stripping URLs, HTML tags, email addresses
+    - Removing non-alphanumeric punctuation
+    - Normalizing whitespaces
+    """
+    if not isinstance(text, str):
+        return ""
+    
+    text = text.lower()
+    text = re.sub(r'<[^>]+>', ' ', text)  # strip HTML tags
+    text = re.sub(r'https?://\S+|www\.\S+', ' url_token ', text)  # normalize URLs
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', ' email_token ', text)
+    text = re.sub(r'[^a-zA-Z0-9_\s]', ' ', text)  # keep words and tokens
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
-VEC_PATH = os.path.join(MODEL_DIR, "vectorizer.pkl")
-MODEL_PATH = os.path.join(MODEL_DIR, "phishing_model.pkl")
+# Robust project-relative paths with environment variable override support
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(BASE_DIR, "model"))
+VEC_PATH = os.environ.get("VECTORIZER_PATH", os.path.join(MODEL_DIR, "vectorizer.pkl"))
+MODEL_PATH = os.environ.get("MODEL_PATH", os.path.join(MODEL_DIR, "phishing_model.pkl"))
 
 # Global cached model instances
 _vectorizer = None
 _model = None
+_model_load_error = None
 
-def load_artifacts():
-    global _vectorizer, _model
-    if _vectorizer is None or _model is None:
+def load_artifacts(force_reload: bool = False):
+    global _vectorizer, _model, _model_load_error
+    if force_reload or _vectorizer is None or _model is None:
         if not os.path.exists(VEC_PATH) or not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(
-                f"Model artifacts missing. Expected {VEC_PATH} and {MODEL_PATH}. "
-                "Run `python ml/train.py` first to train the model."
+            _model_load_error = (
+                f"Model artifacts missing. Expected vectorizer at '{VEC_PATH}' "
+                f"and model at '{MODEL_PATH}'."
             )
-        _vectorizer = joblib.load(VEC_PATH)
-        _model = joblib.load(MODEL_PATH)
+            raise FileNotFoundError(_model_load_error)
+        try:
+            _vectorizer = joblib.load(VEC_PATH)
+            _model = joblib.load(MODEL_PATH)
+            _model_load_error = None
+        except Exception as e:
+            _model_load_error = f"Failed to load model artifacts: {str(e)}"
+            raise RuntimeError(_model_load_error) from e
     return _vectorizer, _model
+
+# Eagerly attempt to load artifacts on module import if available
+try:
+    load_artifacts()
+except Exception:
+    pass
 
 def predict_threat(text: str) -> Dict[str, Any]:
     """
@@ -123,10 +154,22 @@ def predict_threat(text: str) -> Dict[str, Any]:
 # ----------------------------------------------------------------------
 # FastAPI Microservice Definition
 # ----------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Eagerly ensure artifacts are loaded when application starts
+    try:
+        load_artifacts()
+        print(f"[+] Loaded ML model from {MODEL_PATH} and vectorizer from {VEC_PATH}")
+    except Exception as e:
+        print(f"[!] Warning: Failed to load model artifacts on startup: {e}", file=sys.stderr)
+    yield
+
 app = FastAPI(
     title="MAVERICK AI Threat Detection Service",
     description="Real ML TF-IDF + Logistic Regression Phishing Classifier API (SIH 2026)",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -150,14 +193,49 @@ class PredictResponse(BaseModel):
     status: Optional[str] = None
     note: Optional[str] = None
 
+@app.get("/")
+def root_endpoint():
+    return {
+        "service": "MAVERICK ML Inference Engine",
+        "version": "1.0.0",
+        "model": "TF-IDF + Logistic Regression",
+        "endpoints": {
+            "health": "/health",
+            "predict": "/predict",
+            "docs": "/docs"
+        }
+    }
+
 @app.get("/health")
 def health_check():
-    artifacts_exist = os.path.exists(VEC_PATH) and os.path.exists(MODEL_PATH)
+    loaded = False
+    error = None
+    try:
+        vec, mdl = load_artifacts()
+        loaded = (vec is not None and mdl is not None)
+    except Exception as e:
+        loaded = False
+        error = str(e)
+
+    if not loaded or _model is None or _vectorizer is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "unhealthy",
+                "service": "MAVERICK ML Inference Engine",
+                "model_loaded": False,
+                "error": error or _model_load_error or "Model artifacts could not be loaded",
+                "vectorizer_path": VEC_PATH,
+                "model_path": MODEL_PATH
+            }
+        )
+
     return {
-        "status": "online" if artifacts_exist else "model_missing",
+        "status": "healthy",
         "service": "MAVERICK ML Inference Engine",
         "model_type": "TF-IDF + Logistic Regression",
-        "artifacts_loaded": _model is not None,
+        "model_loaded": True,
+        "vocabulary_size": len(_vectorizer.vocabulary_) if hasattr(_vectorizer, "vocabulary_") else None,
         "vectorizer_path": VEC_PATH,
         "model_path": MODEL_PATH
     }
@@ -178,14 +256,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MAVERICK ML Inference Tool")
     parser.add_argument("--text", type=str, help="Email text to evaluate")
     parser.add_argument("--serve", action="store_true", help="Start FastAPI HTTP prediction server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host address")
-    parser.add_argument("--port", type=int, default=8000, help="Port number")
+    default_host = os.environ.get("HOST", "0.0.0.0")
+    default_port = int(os.environ.get("PORT", 8000))
+    parser.add_argument("--host", default=default_host, help="Host address (default: 0.0.0.0 or $HOST)")
+    parser.add_argument("--port", type=int, default=default_port, help="Port number (default: 8000 or $PORT)")
     args = parser.parse_args()
 
     if args.serve:
-        print(f"[*] Starting MAVERICK ML Inference Service on http://{args.host}:{args.port}")
-        uvicorn.run(app, host=args.host, port=args.port)
-    elif args.text:
+        host = os.environ.get("HOST", args.host)
+        port = int(os.environ.get("PORT", args.port))
+        print(f"[*] Starting MAVERICK ML Inference Service on http://{host}:{port}")
+        uvicorn.run(app, host=host, port=port)
+    elif args.text is not None:
         result = predict_threat(args.text)
         print(json.dumps(result, indent=2))
     else:
