@@ -19,6 +19,7 @@ import {
   Layers,
   Cpu
 } from 'lucide-react';
+import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
 
 export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
   const email = currentAnalysis?.email;
@@ -441,6 +442,9 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
               * Note: Machine learning threat analysis generates probabilistic lexical predictions based on statistical TF-IDF word distributions and does not constitute absolute proof on its own.
             </div>
           </div>
+
+          {/* 📎 ATTACHMENT FORENSICS Section */}
+          <AttachmentForensicsCard attachments={email?.attachments || []} />
 
         </div>
 

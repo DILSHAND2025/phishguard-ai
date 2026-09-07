@@ -25,6 +25,8 @@ import { defaultGeoService } from './services/geoLocationService';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from './services/evidenceFusion';
 import { correlateThreatCampaigns } from './services/campaignCorrelator';
 import { getStoredCases, createCaseFromAnalysis } from './services/caseStore';
+import { analyzeAttachment } from './services/attachmentForensics';
+import { defaultHashReputationService } from './services/hashReputationService';
 import { SYNTHETIC_SCENARIOS } from './data/syntheticScenarios';
 
 import './App.css';
@@ -198,7 +200,29 @@ function App() {
       // 2. Real AI/ML Threat Analysis (TF-IDF + Logistic Regression)
       const aiThreat = await evaluateAIThreat(parsedEmail);
 
-      // 3. Network Indicators & Multi-IP GeoLocation
+      // 3. Static Attachment Forensics & Hash Threat Reputation
+      if (parsedEmail.attachments && parsedEmail.attachments.length > 0) {
+        parsedEmail.attachments = await Promise.all(
+          parsedEmail.attachments.map(async (att, idx) => {
+            let record = att;
+            if (!att.observed) {
+              record = await analyzeAttachment({
+                filename: att.filename,
+                content: att.content || null,
+                mimeType: att.mimeType || 'application/octet-stream',
+                index: idx,
+                knownHashes: { sha256: att.sha256, sha1: att.sha1, md5: att.md5 }
+              });
+            }
+            if (record.sha256 && !record.reputation) {
+              record.reputation = await defaultHashReputationService.checkHash(record.sha256);
+            }
+            return record;
+          })
+        );
+      }
+
+      // 4. Network Indicators & Multi-IP GeoLocation
       const networkIndicators = extractNetworkIndicators(parsedEmail);
       const geoList = await defaultGeoService.resolveAllIPs(networkIndicators);
       const geoInfo = geoList.find(g => g.role === 'SOURCE' && !g.isPrivate) || 

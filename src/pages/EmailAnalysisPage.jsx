@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { parseEmailContent } from '../services/emailParser';
 import { SYNTHETIC_SCENARIOS } from '../data/syntheticScenarios';
+import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
 
 const PIPELINE_STAGES = [
   { id: 1, name: 'Email Parsing', detail: 'Decoding MIME envelope, headers & boundary structures', duration: '34ms' },
@@ -642,6 +643,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
             </div>
 
           </div>
+
+          {/* 📎 ATTACHMENT FORENSICS Deep Inspection Section */}
+          {emailData.attachments && emailData.attachments.length > 0 && (
+            <AttachmentForensicsCard attachments={emailData.attachments} />
+          )}
 
           {/* Optional Raw Headers Snippet */}
           {showRawHeaders && (

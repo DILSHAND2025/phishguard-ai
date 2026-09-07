@@ -6,6 +6,8 @@
  * Extracts headers, Received chain hops, originating IP, body, and attachment metadata.
  */
 
+import { analyzeAttachment } from './attachmentForensics.js';
+
 // Helper to compute SHA-256 in browser using Web Crypto API
 export async function computeSHA256(content) {
   try {
@@ -374,31 +376,70 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
   const replyToMismatch = Boolean(replyToParsed.address && fromParsed.address && (replyToParsed.domain !== fromParsed.domain));
   const returnPathMismatch = Boolean(returnPathParsed.address && fromParsed.address && (returnPathParsed.domain !== fromParsed.domain));
 
-  // Parse Attachments (look for Content-Disposition: attachment or filename=)
+  // Parse Attachments (look for MIME boundaries or Content-Disposition: attachment)
   const attachments = [];
-  const attachmentMatches = rawInput.matchAll(/Content-Disposition:\s*attachment;[^]*?filename="?([^"\r\n]+)"?/gi);
-  for (const match of attachmentMatches) {
-    const filename = match[1];
-    const safety = inspectAttachmentSafety(filename, 248420);
-    const mockHash = await computeSHA256(filename + Date.now());
-    attachments.push({
-      ...safety,
-      md5: computeFastHash(filename, 32),
-      sha1: computeFastHash(filename, 40),
-      sha256: mockHash
-    });
+  const boundaryMatch = headers['content-type']?.match(/boundary="?([^";\r\n]+)"?/i);
+  let parsedMimeParts = false;
+
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1];
+    const rawParts = rawInput.split(new RegExp(`--${boundary}(?:--)?`));
+    for (let pIdx = 0; pIdx < rawParts.length; pIdx++) {
+      const part = rawParts[pIdx];
+      const partHeaderEnd = part.search(/\r?\n\r?\n/);
+      if (partHeaderEnd === -1) continue;
+
+      const partHeaderText = part.substring(0, partHeaderEnd);
+      const partBody = part.substring(partHeaderEnd).replace(/^\r?\n\r?\n/, '').trim();
+
+      const filenameMatch = partHeaderText.match(/filename="?([^"\r\n]+)"?/i) || partHeaderText.match(/name="?([^"\r\n]+)"?/i);
+      const isAttachmentDisp = /Content-Disposition:\s*attachment/i.test(partHeaderText);
+
+      if (filenameMatch || (isAttachmentDisp && filenameMatch)) {
+        parsedMimeParts = true;
+        const filename = filenameMatch[1];
+        const mimeMatch = partHeaderText.match(/Content-Type:\s*([^;\r\n]+)/i);
+        const declaredMime = mimeMatch ? mimeMatch[1].trim() : 'application/octet-stream';
+        
+        // Pass base64 content if present, or null
+        const isBase64 = /Content-Transfer-Encoding:\s*base64/i.test(partHeaderText);
+        const contentPayload = isBase64 ? partBody : (partBody.length > 0 ? partBody : null);
+
+        const forensicRecord = await analyzeAttachment({
+          filename,
+          content: contentPayload,
+          mimeType: declaredMime,
+          index: attachments.length
+        });
+        attachments.push(forensicRecord);
+      }
+    }
+  }
+
+  // Fallback: regex search if MIME boundary split did not find attachments
+  if (!parsedMimeParts) {
+    const attachmentMatches = rawInput.matchAll(/Content-Disposition:\s*attachment;[^]*?filename="?([^"\r\n]+)"?/gi);
+    for (const match of attachmentMatches) {
+      const filename = match[1];
+      const forensicRecord = await analyzeAttachment({
+        filename,
+        content: null,
+        mimeType: 'application/octet-stream',
+        index: attachments.length
+      });
+      attachments.push(forensicRecord);
+    }
   }
 
   // If user provided a fileMetadata attachment or manual attachment
   if (fileMetadata && fileMetadata.name && attachments.length === 0 && fileMetadata.name.endsWith('.eml') === false) {
-    const safety = inspectAttachmentSafety(fileMetadata.name, fileMetadata.size || 10240);
-    const sha256 = await computeSHA256(fileMetadata.name);
-    attachments.push({
-      ...safety,
-      md5: computeFastHash(fileMetadata.name, 32),
-      sha1: computeFastHash(fileMetadata.name, 40),
-      sha256
+    const forensicRecord = await analyzeAttachment({
+      filename: fileMetadata.name,
+      content: fileMetadata.content || null,
+      mimeType: fileMetadata.type || 'application/octet-stream',
+      index: 0
     });
+    attachments.push(forensicRecord);
   }
 
   // Sanitize body snippet for display

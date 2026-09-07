@@ -262,10 +262,28 @@ export function calculateEvidenceFusion({
   const suspiciousAtts = attachments.filter(a => a.isSuspicious);
 
   if (suspiciousAtts.length > 0) {
-    attScore += 10;
-    attReasons.push(`❌ High-risk attachment detected: "${suspiciousAtts[0].filename}" (${suspiciousAtts[0].flag}).`);
+    const primarySus = suspiciousAtts[0];
+    const isMalicious = primarySus.inferred?.assessment === 'MALICIOUS' || primarySus.isSuspicious;
+    attScore = isMalicious ? 10 : 6;
+
+    attReasons.push(`❌ High-risk attachment detected: "${primarySus.filename}" (${primarySus.flag || primarySus.inferred?.assessment || 'Adversarial Payload'}).`);
+
+    // Include detailed observed static indicators
+    if (primarySus.observed?.indicators?.length > 0) {
+      primarySus.observed.indicators
+        .filter(ind => ind.severity === 'CRITICAL' || ind.severity === 'HIGH')
+        .slice(0, 3)
+        .forEach(ind => {
+          attReasons.push(`⚠️ Static Forensics: ${ind.label} (${ind.detail})`);
+        });
+    }
+
+    // Threat intelligence reputation evidence
+    if (primarySus.reputation?.verdict === 'MALICIOUS') {
+      attReasons.push(`🔴 Threat Intel: SHA-256 (${(primarySus.sha256 || '').slice(0, 12)}...) flagged malicious by security vendors (${primarySus.reputation.score}).`);
+    }
   } else if (attachments.length > 0) {
-    attReasons.push(`📎 ${attachments.length} attachment(s) verified as standard benign document format.`);
+    attReasons.push(`📎 ${attachments.length} attachment(s) verified as standard benign format with clean static signatures.`);
   }
 
   const clampedAttScore = Math.min(weights.attachmentPayload, attScore);
@@ -274,11 +292,11 @@ export function calculateEvidenceFusion({
   factors.push({
     id: 'attachment-analysis',
     category: 'Attachment Analysis',
-    name: 'MIME Binary & Double Extension Inspection',
+    name: 'Static Forensics & Payload Inspection',
     points: clampedAttScore,
     maxPoints: weights.attachmentPayload,
-    severity: clampedAttScore >= 8 ? 'CRITICAL' : 'LOW',
-    status: clampedAttScore >= 8 ? 'FLAGGED' : 'PASS',
+    severity: clampedAttScore >= 8 ? 'CRITICAL' : clampedAttScore >= 5 ? 'HIGH' : 'LOW',
+    status: clampedAttScore >= 5 ? 'FLAGGED' : 'PASS',
     evidence: attReasons.length > 0 
       ? attReasons.join(' ')
       : 'No file attachments enclosed in this email.',

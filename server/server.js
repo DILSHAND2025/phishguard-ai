@@ -15,6 +15,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import url from 'node:url';
+import { analyzeAttachment } from '../src/services/attachmentForensics.js';
 
 const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
@@ -334,7 +335,9 @@ const server = http.createServer(async (req, res) => {
           ? `https://www.virustotal.com/api/v3/ip_addresses/${encodeURIComponent(ioc)}`
           : type.toUpperCase() === 'DOMAIN'
             ? `https://www.virustotal.com/api/v3/domains/${encodeURIComponent(ioc)}`
-            : null;
+            : (type.toUpperCase() === 'HASH' || type.toUpperCase().includes('SHA') || type.toUpperCase().includes('MD5'))
+              ? `https://www.virustotal.com/api/v3/files/${encodeURIComponent(ioc)}`
+              : null;
 
         if (vtEndpoint) {
           const vtRes = await fetchExternalJson(vtEndpoint, { 'x-apikey': VT_API_KEY });
@@ -369,6 +372,134 @@ const server = http.createServer(async (req, res) => {
 
     CACHE.set(cacheKey, payload);
     return sendJson(res, 200, payload);
+  }
+
+  // Attachment Forensic Analysis Endpoint: POST /api/attachment/analyze
+  if (pathname === '/api/attachment/analyze' && req.method === 'POST') {
+    const contentType = req.headers['content-type'] || '';
+    const chunks = [];
+
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        const fullBuffer = Buffer.concat(chunks);
+        let filename = 'attachment.bin';
+        let mimeType = 'application/octet-stream';
+        let contentBuffer = null;
+
+        if (contentType.includes('application/json')) {
+          const jsonBody = JSON.parse(fullBuffer.toString('utf-8') || '{}');
+          filename = jsonBody.filename || 'attachment.bin';
+          mimeType = jsonBody.mime_type || jsonBody.mimeType || 'application/octet-stream';
+          if (jsonBody.content) {
+            contentBuffer = Buffer.from(jsonBody.content, 'base64');
+          }
+        } else if (contentType.includes('multipart/form-data')) {
+          // Parse multipart form data safely in-memory without OS execution
+          const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+          if (boundaryMatch) {
+            const boundary = boundaryMatch[1] || boundaryMatch[2];
+            const boundaryBuffer = Buffer.from(`--${boundary}`);
+            let start = fullBuffer.indexOf(boundaryBuffer);
+
+            while (start !== -1) {
+              const nextStart = fullBuffer.indexOf(boundaryBuffer, start + boundaryBuffer.length);
+              const part = nextStart !== -1 
+                ? fullBuffer.subarray(start + boundaryBuffer.length, nextStart)
+                : fullBuffer.subarray(start + boundaryBuffer.length);
+
+              const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
+              if (headerEnd !== -1) {
+                const headerText = part.subarray(0, headerEnd).toString('utf-8');
+                const fileMatch = headerText.match(/filename="?([^"\r\n]+)"?/i);
+                const typeMatch = headerText.match(/Content-Type:\s*([^\r\n;]+)/i);
+
+                if (fileMatch) {
+                  filename = fileMatch[1];
+                  if (typeMatch) mimeType = typeMatch[1].trim();
+                  // Extract binary data (trim leading \r\n\r\n and trailing \r\n)
+                  let dataPart = part.subarray(headerEnd + 4);
+                  if (dataPart.length >= 2 && dataPart[dataPart.length - 2] === 0x0D && dataPart[dataPart.length - 1] === 0x0A) {
+                    dataPart = dataPart.subarray(0, dataPart.length - 2);
+                  }
+                  contentBuffer = dataPart;
+                  break;
+                }
+              }
+              start = nextStart;
+            }
+          }
+        } else {
+          // Raw stream fallback
+          contentBuffer = fullBuffer;
+        }
+
+        // Run safe static forensic analysis
+        const forensicResult = await analyzeAttachment({
+          filename,
+          content: contentBuffer,
+          mimeType
+        });
+
+        // Query hash reputation if VT_API_KEY is active and sha256 is present
+        let reputation = {
+          provider: 'VirusTotal (via Gateway)',
+          status: 'UNAVAILABLE',
+          verdict: 'UNAVAILABLE',
+          score: 'N/A',
+          details: 'Threat intelligence API unconfigured on server'
+        };
+
+        if (VT_API_KEY && forensicResult.sha256) {
+          try {
+            const vtRes = await fetchExternalJson(
+              `https://www.virustotal.com/api/v3/files/${encodeURIComponent(forensicResult.sha256)}`,
+              { 'x-apikey': VT_API_KEY }
+            );
+            if (vtRes && vtRes.data && vtRes.data.attributes) {
+              const stats = vtRes.data.attributes.last_analysis_stats || {};
+              const mal = stats.malicious || 0;
+              const sus = stats.suspicious || 0;
+              const total = (stats.harmless || 0) + (stats.undetected || 0) + mal + sus;
+              reputation = {
+                provider: 'VirusTotal',
+                status: 'SUCCESS',
+                score: `${mal}/${total}`,
+                maliciousCount: mal,
+                totalCount: total,
+                verdict: mal > 5 ? 'MALICIOUS' : sus > 2 ? 'SUSPICIOUS' : 'CLEAN',
+                details: `Flagged malicious by ${mal} security vendors`
+              };
+            }
+          } catch {
+            // Keep unavailable
+          }
+        }
+
+        const responsePayload = {
+          filename: forensicResult.filename,
+          size: forensicResult.sizeBytes,
+          mime_type: forensicResult.mimeType,
+          detected_type: forensicResult.detectedType,
+          sha256: forensicResult.sha256,
+          sha1: forensicResult.sha1,
+          md5: forensicResult.md5,
+          indicators: forensicResult.observed?.indicators || [],
+          reputation,
+          risk: forensicResult.inferred || {},
+          status: 'SUCCESS'
+        };
+
+        return sendJson(res, 200, responsePayload);
+      } catch (err) {
+        return sendJson(res, 500, {
+          status: 'ERROR',
+          error: 'Failed to process attachment static analysis',
+          details: err.message
+        });
+      }
+    });
+    return;
   }
 
   // Fallback 404
