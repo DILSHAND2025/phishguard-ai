@@ -129,11 +129,15 @@ export function isPrivateIP(ip) {
   if (clean.startsWith('10.') || clean.startsWith('127.') || clean.startsWith('0.')) return true;
   if (clean.startsWith('192.168.')) return true;
   if (clean.startsWith('169.254.')) return true; // Link-local
-  if (clean.startsWith('100.64.')) return true; // Carrier-grade NAT
   if (clean.startsWith('172.')) {
     const parts = clean.split('.');
     const secondOctet = parseInt(parts[1], 10);
     if (secondOctet >= 16 && secondOctet <= 31) return true;
+  }
+  if (clean.startsWith('100.')) {
+    const parts = clean.split('.');
+    const secondOctet = parseInt(parts[1], 10);
+    if (secondOctet >= 64 && secondOctet <= 127) return true; // Carrier-grade NAT 100.64.0.0/10
   }
   if (clean === '255.255.255.255' || clean.startsWith('224.') || clean.startsWith('240.')) return true;
 
@@ -143,6 +147,21 @@ export function isPrivateIP(ip) {
   if (clean.startsWith('fc00:') || clean.startsWith('fd00:')) return true; // Unique local (ULA)
   if (clean.startsWith('ff00:')) return true; // Multicast
 
+  return false;
+}
+
+/**
+ * Enhanced IP validator for SSRF protection and strict boundary auditing.
+ * Checks standard private ranges as well as documentation/test networks (RFC 5737 / RFC 3849).
+ */
+export function isPrivateOrReservedIP(ip) {
+  if (!ip || typeof ip !== 'string') return true;
+  if (isPrivateIP(ip)) return true;
+  const clean = ip.trim().toLowerCase();
+  // Documentation test-nets (RFC 5737: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)
+  if (clean.startsWith('192.0.2.') || clean.startsWith('198.51.100.') || clean.startsWith('203.0.113.')) return true;
+  // IPv6 Documentation prefix (RFC 3849: 2001:db8::/32)
+  if (clean.startsWith('2001:db8:')) return true;
   return false;
 }
 

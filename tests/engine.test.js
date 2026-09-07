@@ -113,9 +113,9 @@ Expedite statutory allocation transfer of INR 4,85,00,000 immediately. Ministeri
   assert(campaigns[0].emailCount === 2, 'Campaign tracks 2 related emails');
   assert(campaigns[0].correlationReason.includes('shared network infrastructure'), 'Campaign correlation explanation complies with required language');
 
-  // Test 7: All 5 Controlled Synthetic Scenarios
-  console.log('\n[+] Testing All 5 Controlled Synthetic Scenarios...');
-  assert(SYNTHETIC_SCENARIOS.length === 5, 'All 5 required synthetic scenarios exist');
+  // Test 7: Controlled Synthetic Scenarios
+  console.log('\n[+] Testing Controlled Synthetic Scenarios...');
+  assert(SYNTHETIC_SCENARIOS.length >= 5, 'All required synthetic scenarios exist');
   for (const s of SYNTHETIC_SCENARIOS) {
     const p = await parseEmailContent(s.rawSnippet);
     assert(p.subject.length > 0, `Scenario "${s.name}" parsed cleanly`);

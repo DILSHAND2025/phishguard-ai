@@ -233,6 +233,24 @@ export class MockGeoProvider extends BaseGeoProvider {
         riskLevel: 'HIGH',
         routingDetails: 'BGP Prefix: 194.26.28.0/23 | Intermediate SMTP Routing Relay',
         ...dataset['194.26.29.110']
+      },
+      '14.139.56.2': {
+        ip: '14.139.56.2',
+        country: 'India',
+        countryCode: 'IN',
+        region: 'Delhi',
+        city: 'New Delhi',
+        latitude: 28.6139,
+        longitude: 77.2090,
+        timezone: 'Asia/Kolkata',
+        asn: 'AS45820',
+        asnOrg: 'National Informatics Centre (NIC)',
+        isp: 'National Informatics Centre',
+        networkType: 'National Educational & Research Network',
+        isProxyOrVpn: false,
+        riskLevel: 'LOW',
+        routingDetails: 'BGP Prefix: 14.139.0.0/16 | Official Indian Government Gateway',
+        ...dataset['14.139.56.2']
       }
     };
   }

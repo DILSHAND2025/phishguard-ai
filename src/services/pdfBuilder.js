@@ -339,7 +339,7 @@ function drawPageFooter(page, pageNum, totalPages, contentHash = '') {
   page.drawText(shortHash, MARGIN, footerY + 14, { font: 'F3', size: 7.5, color: COLORS.textMuted });
 
   // Center: standard notice
-  page.drawText('GOVERNMENT / LAW ENFORCEMENT ADMISSIBLE FORENSIC RECORD', MARGIN + 130, footerY + 14, { font: 'F1', size: 7, color: COLORS.textMuted });
+  page.drawText('TAMPER-EVIDENT DIGITAL FORENSIC RECORD (SECTION 65B EVIDENCE PRESERVATION)', MARGIN + 90, footerY + 14, { font: 'F1', size: 7, color: COLORS.textMuted });
 
   // Right: page numbering
   const pageStr = `Page ${pageNum} of ${totalPages}`;
@@ -464,7 +464,7 @@ export function generateForensicPdf(report) {
     page.drawText('FORENSIC CHAIN OF CUSTODY CERTIFICATE', MARGIN + 16, sealY + 20, { font: 'F2', size: 9, color: COLORS.accentCyan });
     page.drawText('Report Content SHA-256 Digest:', MARGIN + 16, sealY + 38, { font: 'F1', size: 8, color: [0.75, 0.82, 0.90] });
     page.drawText(contentHash || 'HASH_PENDING_COMPUTATION', MARGIN + 16, sealY + 52, { font: 'F3', size: 8, color: COLORS.textLight });
-    page.drawText('Admissibility: Produced by MAVERICK Engine under ISO/IEC 27037:2012 Digital Evidence Handling Guidelines.', MARGIN + 16, sealY + 72, { font: 'F1', size: 7.5, color: COLORS.textMuted });
+    page.drawText('Evidentiary Integrity: Produced under ISO/IEC 27037:2012 Guidelines supporting statutory evidence preservation.', MARGIN + 16, sealY + 72, { font: 'F1', size: 7.5, color: COLORS.textMuted });
 
     drawPageFooter(page, 1, totalPages, contentHash);
   }

@@ -955,24 +955,26 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
   }
 
   // 3. DNS Forensics Resolution
+  const activeResolver = options.dnsResolver || options.resolver;
+
   // Query SPF for Return-Path domain (RFC 7208) or From domain as fallback
   const spfDomainToQuery = returnPathDomain || fromDomain;
   let spfDns = null;
   if (spfDomainToQuery) {
-    spfDns = await querySpfRecord(spfDomainToQuery, { resolver: options.dnsResolver });
+    spfDns = await querySpfRecord(spfDomainToQuery, { resolver: activeResolver });
   }
 
   // Query DKIM keys
   const dkimDnsResults = [];
   for (const target of dkimLookups) {
-    const res = await queryDkimRecord(target.selector, target.domain, { resolver: options.dnsResolver });
+    const res = await queryDkimRecord(target.selector, target.domain, { resolver: activeResolver });
     dkimDnsResults.push(res);
   }
 
   // Query DMARC record for From domain (RFC 7489)
   let dmarcDns = null;
   if (fromDomain) {
-    dmarcDns = await queryDmarcRecord(fromDomain, { resolver: options.dnsResolver });
+    dmarcDns = await queryDmarcRecord(fromDomain, { resolver: activeResolver });
   }
 
   // 4. Domain Alignment Analysis

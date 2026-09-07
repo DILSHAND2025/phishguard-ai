@@ -235,18 +235,27 @@ function App() {
       let emailAuth = null;
       const rawSnippetText = parsedEmail.rawSnippet || (typeof emailInput === 'string' ? emailInput : '');
       if (rawSnippetText) {
-        try {
-          const res = await fetch('http://localhost:5000/api/email-authentication', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: rawSnippetText }),
-            signal: AbortSignal.timeout(3000)
-          });
-          if (res.ok) {
-            emailAuth = await res.json();
+        const authEndpoints = [
+          '/api/email-authentication',
+          'http://localhost:5000/api/email-authentication',
+          'http://127.0.0.1:5000/api/email-authentication'
+        ];
+
+        for (const endpoint of authEndpoints) {
+          try {
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: rawSnippetText }),
+              signal: AbortSignal.timeout(2500)
+            });
+            if (res.ok) {
+              emailAuth = await res.json();
+              if (emailAuth) break;
+            }
+          } catch {
+            // Try next endpoint fallback
           }
-        } catch {
-          // Backend gateway offline or unreachable, fall back to direct service
         }
         if (!emailAuth) {
           emailAuth = await analyzeEmailAuthentication(rawSnippetText);

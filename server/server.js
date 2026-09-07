@@ -19,6 +19,9 @@ import { analyzeAttachment } from '../src/services/attachmentForensics.js';
 import { analyzeEmailAuthentication } from '../src/services/emailAuthService.js';
 import { buildForensicReport } from '../src/services/forensicReportService.js';
 import { generateForensicPdf, computePdfFileHash } from '../src/services/pdfBuilder.js';
+import { isPrivateOrReservedIP } from '../src/services/emailParser.js';
+
+export { isPrivateOrReservedIP };
 
 const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
@@ -175,13 +178,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 400, { ip, status: 'INVALID_IP', error: 'Invalid IP address format' });
     }
 
-    // Check private / reserved IP
+    // Check private / reserved IP (SSRF Protection)
     const cleanIP = ip.trim().toLowerCase();
-    if (
-      cleanIP.startsWith('10.') || cleanIP.startsWith('127.') || cleanIP.startsWith('0.') ||
-      cleanIP.startsWith('192.168.') || cleanIP.startsWith('169.254.') || cleanIP.startsWith('100.64.') ||
-      cleanIP === '255.255.255.255' || cleanIP === '::1' || cleanIP === '::' || cleanIP.startsWith('fe80:') || cleanIP.startsWith('fc00:')
-    ) {
+    if (isPrivateOrReservedIP(cleanIP)) {
       return sendJson(res, 200, {
         ip: cleanIP,
         status: 'PRIVATE_IP',
@@ -644,7 +643,12 @@ const server = http.createServer(async (req, res) => {
   return sendJson(res, 404, { error: 'Route not found' });
 });
 
-server.listen(PORT, () => {
-  console.log(`[+] MAVERICK Intelligence Gateway running on http://localhost:${PORT}`);
-  console.log(`[+] VirusTotal configured: ${Boolean(VT_API_KEY)} | AbuseIPDB configured: ${Boolean(ABUSE_API_KEY)}`);
-});
+const isDirectExecution = Boolean(process.argv[1] && (process.argv[1].endsWith('server.js') || process.argv[1].endsWith('server')));
+if (isDirectExecution) {
+  server.listen(PORT, () => {
+    console.log(`[+] MAVERICK Intelligence Gateway running on http://localhost:${PORT}`);
+    console.log(`[+] VirusTotal configured: ${Boolean(VT_API_KEY)} | AbuseIPDB configured: ${Boolean(ABUSE_API_KEY)}`);
+  });
+}
+
+export { server };

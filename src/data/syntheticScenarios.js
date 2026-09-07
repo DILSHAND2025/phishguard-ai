@@ -364,6 +364,75 @@ Reply-To: <support@internal-corp-portal.online>
 Return-Path: <bounces@unverified-relay-mailer.top>
 Subject: CRITICAL ALERT: Emergency Network Security Protocol Update
 Date: Fri, 05 Sep 2026 11:50:00 +0530`
+  },
+
+  {
+    id: 'legitimate-circular',
+    name: 'Official Departmental Circular (Legitimate Baseline)',
+    category: 'Legitimate Internal Communication',
+    tag: 'DEMO / BENIGN BASELINE',
+    summary: 'Genuine organizational administrative update from verified executive desk with passing SPF, DKIM, and DMARC alignment.',
+    sender: 'Dr. Ramesh Sharma <director-office@gov-organization.in>',
+    recipient: 'all-personnel@gov-organization.in',
+    subject: 'Quarterly Operations Review & Technology Symposium Schedule',
+    date: 'Fri, 05 Sep 2026 09:30:00 +0530 (IST)',
+    replyTo: 'director-office@gov-organization.in',
+    returnPath: 'director-office@gov-organization.in',
+    originatingIP: '14.139.56.2',
+    asn: 'AS45820',
+    asnOrg: 'National Informatics Centre (NIC)',
+    country: 'India',
+    countryCode: 'IN',
+    networkType: 'National Educational & Research Network',
+    spfResult: 'PASS (Designated IP authorized by SPF)',
+    dkimResult: 'PASS (Valid cryptographic RSA-SHA256 signature)',
+    dmarcResult: 'PASS (Policy: None / 100% Aligned)',
+    replyToMismatch: false,
+    returnPathMismatch: false,
+    urls: [
+      'https://gov-organization.in/symposium/schedule-2026'
+    ],
+    ips: [
+      '14.139.56.2'
+    ],
+    attachments: [],
+    bodyText: `Dear Colleagues,
+
+The executive council has published the schedule for the upcoming Annual Science and Technology Symposium scheduled for next month.
+All department heads are requested to finalize paper submissions by the 20th of this month.
+Standard organizational protocols apply. Thank you for your continued dedication.
+
+Warm regards,
+Dr. Ramesh Sharma
+Director General, Operations`,
+    rawSnippet: `Delivered-To: all-personnel@gov-organization.in
+Received: from mail-gateway.gov-organization.in (14.139.56.2)
+        by mail.gov-organization.in with ESMTP id q192837;
+        Fri, 05 Sep 2026 09:30:00 +0530 (IST)
+Return-Path: <director-office@gov-organization.in>
+Received-SPF: pass (mail.gov-organization.in: domain of director-office@gov-organization.in designates 14.139.56.2 as permitted sender)
+Authentication-Results: mail.gov-organization.in;
+       spf=pass (mail.gov-organization.in: 14.139.56.2) smtp.mailfrom=director-office@gov-organization.in;
+       dkim=pass header.i=@gov-organization.in header.s=s1;
+       dmarc=pass (p=NONE sp=NONE pct=100) header.from=gov-organization.in
+From: "Dr. Ramesh Sharma" <director-office@gov-organization.in>
+Reply-To: <director-office@gov-organization.in>
+To: <all-personnel@gov-organization.in>
+Subject: Quarterly Operations Review & Technology Symposium Schedule
+Date: Fri, 05 Sep 2026 09:30:00 +0530
+Message-ID: <SIH-2026-LEGIT-001@gov-organization.in>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Dear Colleagues,
+
+The executive council has published the schedule for the upcoming Annual Science and Technology Symposium scheduled for next month.
+All department heads are requested to finalize paper submissions by the 20th of this month.
+Standard organizational protocols apply. Thank you for your continued dedication.
+
+Warm regards,
+Dr. Ramesh Sharma
+Director General, Operations`
   }
 ];
 
