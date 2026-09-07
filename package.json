@@ -8,7 +8,7 @@
     "server": "node server/server.js",
     "ml": "python ml/predict.py --serve --port 8000",
     "train": "python ml/train.py",
-    "test": "node tests/engine.test.js && node --test tests/auth.test.js tests/ml.test.js tests/geo.test.js tests/attachment.test.js tests/emailAuth.test.js",
+    "test": "node tests/engine.test.js && node --test tests/auth.test.js tests/ml.test.js tests/geo.test.js tests/attachment.test.js tests/emailAuth.test.js tests/forensicReport.test.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"

@@ -1,28 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ShieldAlert, 
-  AlertTriangle, 
-  CheckCircle2, 
   Brain, 
   ArrowRight, 
-  ArrowLeft,
-  Binary,
-  GitFork,
-  Globe,
-  Mail,
-  Paperclip,
-  ShieldX,
-  FileWarning,
-  Activity,
-  Info,
-  Server,
-  Layers,
-  Cpu
+  ArrowLeft, 
+  Binary, 
+  GitFork, 
+  Globe, 
+  Paperclip, 
+  ShieldX, 
+  Activity, 
+  Info, 
+  Server, 
+  Cpu, 
+  FileText, 
+  Download 
 } from 'lucide-react';
 import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
 import { EmailAuthenticationCard } from '../components/dashboard/EmailAuthenticationCard.jsx';
+import { buildForensicReport } from '../services/forensicReportService.js';
+import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilder.js';
 
 export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
+  const [exportingPdf, setExportingPdf] = useState(false);
   const email = currentAnalysis?.email;
   const fusion = currentAnalysis?.fusion;
   const aiThreat = currentAnalysis?.aiThreat;
@@ -151,6 +151,16 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Ingestion</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-view-forensic-report-top"
+              onClick={() => onViewChange('forensic-report')}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-950 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/40 text-emerald-300 font-mono text-xs transition-all cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Forensic Dossier</span>
             </button>
 
             <button
@@ -452,6 +462,60 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
 
         </div>
 
+      </div>
+
+      {/* 📄 AUTOMATED FORENSIC REPORT & PDF EXPORT Section */}
+      <div className="rounded-2xl bg-gradient-to-r from-[#0d162a] via-[#091122] to-[#060a14] border border-cyan-500/40 p-6 shadow-xl font-mono">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-cyan-400 text-xs mb-1">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+              STAGE 08 READY • AUTOMATED FORENSIC REPORTING & PDF EXPORT
+            </div>
+            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-cyan-400" />
+              <span>Certified Forensic Incident Dossier & Chain of Custody</span>
+            </h3>
+            <p className="text-xs text-slate-300 mt-1 font-sans">
+              Compile full 6-layer evidence into a court-admissible, tamper-evident forensic report complete with real SHA-256 integrity digest.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              id="btn-view-forensic-report-bottom"
+              onClick={() => onViewChange('forensic-report')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              <span>View Full Dossier</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-export-pdf-bottom"
+              onClick={async () => {
+                try {
+                  setExportingPdf(true);
+                  const rep = await buildForensicReport(currentAnalysis);
+                  const bytes = generateForensicPdf(rep);
+                  downloadPdfInBrowser(bytes, `${rep.caseId || 'MAVERICK'}-Forensic-Report.pdf`);
+                } catch (err) {
+                  console.error('Direct PDF export failed:', err);
+                  alert(`PDF Export Failed: ${err.message}`);
+                } finally {
+                  setExportingPdf(false);
+                }
+              }}
+              disabled={exportingPdf}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span>{exportingPdf ? 'Generating PDF...' : 'Export Certified PDF'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
     </div>

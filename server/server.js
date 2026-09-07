@@ -17,6 +17,8 @@ import https from 'node:https';
 import url from 'node:url';
 import { analyzeAttachment } from '../src/services/attachmentForensics.js';
 import { analyzeEmailAuthentication } from '../src/services/emailAuthService.js';
+import { buildForensicReport } from '../src/services/forensicReportService.js';
+import { generateForensicPdf, computePdfFileHash } from '../src/services/pdfBuilder.js';
 
 const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
@@ -557,6 +559,80 @@ const server = http.createServer(async (req, res) => {
           success: false,
           status: 'ERROR',
           error: 'Failed to process email authentication forensics',
+          details: err.message
+        });
+      }
+    });
+    return;
+  }
+
+  // Automated Forensic Report Generation Endpoint: POST /api/forensic-report
+  if ((pathname === '/api/forensic-report' || pathname === '/api/report') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const analysisData = payload.analysisResult || payload.analysis || payload;
+        const options = payload.options || {};
+        
+        const report = await buildForensicReport(analysisData, options);
+        return sendJson(res, 200, {
+          success: true,
+          status: 'SUCCESS',
+          report
+        });
+      } catch (err) {
+        return sendJson(res, 500, {
+          success: false,
+          status: 'ERROR',
+          error: 'Failed to compile forensic report',
+          details: err.message
+        });
+      }
+    });
+    return;
+  }
+
+  // Certified Forensic Report PDF Export Endpoint: POST /api/forensic-report/pdf
+  if ((pathname === '/api/forensic-report/pdf' || pathname === '/api/report/pdf') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const report = payload.report || await buildForensicReport(payload.analysisResult || payload.analysis || payload, payload.options);
+        const pdfBytes = generateForensicPdf(report);
+        const fileHash = await computePdfFileHash(pdfBytes);
+        const filename = `${report.caseId || 'MAV-2026-REPORT'}-Forensic-Dossier.pdf`;
+
+        const acceptHeader = req.headers['accept'] || '';
+        if (payload.format === 'json' || acceptHeader.includes('application/json')) {
+          return sendJson(res, 200, {
+            success: true,
+            status: 'SUCCESS',
+            caseId: report.caseId,
+            filename,
+            pdfSha256: fileHash,
+            pdfBase64: Buffer.from(pdfBytes).toString('base64'),
+            contentHash: report.evidenceIntegrity?.contentHashSha256
+          });
+        }
+
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Length': pdfBytes.length,
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'X-Report-SHA256': fileHash,
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'X-Report-SHA256, Content-Disposition'
+        });
+        return res.end(Buffer.from(pdfBytes));
+      } catch (err) {
+        return sendJson(res, 500, {
+          success: false,
+          status: 'ERROR',
+          error: 'Failed to generate forensic PDF',
           details: err.message
         });
       }
