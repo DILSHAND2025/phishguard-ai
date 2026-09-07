@@ -36,6 +36,7 @@ export function calculateEvidenceFusion({
   iocs = [],
   geoInfo = null,
   geoList = [],
+  emailAuth = null,
   weights = DEFAULT_FUSION_WEIGHTS
 }) {
   const factors = [];
@@ -83,41 +84,69 @@ export function calculateEvidenceFusion({
   // 2. Email Header Forensics Layer (Max 20 pts)
   let headerScore = 0;
   const headerReasons = [];
+  const activeAuth = emailAuth || parsedEmail?.emailAuth;
 
   // SPF check
-  const spf = parsedEmail?.auth?.spf?.result || 'UNKNOWN';
-  if (spf === 'FAIL') {
+  const spfVerdict = (activeAuth?.observedEvidence?.mtaAuthentication?.observedSpfVerdict || parsedEmail?.auth?.spf?.result || 'UNKNOWN').toUpperCase();
+  if (spfVerdict === 'FAIL') {
     headerScore += 6;
     headerReasons.push('❌ SPF verification FAILED: Sender IP rejected by domain SPF policy.');
-  } else if (spf === 'SOFTFAIL') {
+  } else if (spfVerdict === 'SOFTFAIL') {
     headerScore += 4;
     headerReasons.push('⚠️ SPF SOFTFAIL: Sender IP is not an authorized designated relay for the domain.');
+  } else if (spfVerdict === 'PERMERROR') {
+    headerScore += 4;
+    headerReasons.push('⚠️ SPF PermError: Multiple conflicting or invalid SPF records.');
+  }
+
+  if (activeAuth?.observedEvidence?.dnsForensics?.spf?.hasPlusAll) {
+    headerScore += 6;
+    headerReasons.push('🚨 Critical SPF Misconfiguration: SPF publishes "+all", allowing any sender to spoof domain.');
   }
 
   // DKIM check
-  const dkim = parsedEmail?.auth?.dkim?.result || 'UNKNOWN';
-  if (dkim === 'FAIL') {
+  const dkimVerdict = (activeAuth?.observedEvidence?.mtaAuthentication?.observedDkimVerdict || parsedEmail?.auth?.dkim?.result || 'UNKNOWN').toUpperCase();
+  if (dkimVerdict === 'FAIL') {
     headerScore += 6;
     headerReasons.push('❌ DKIM cryptographic signature verification FAILED (tampered body or forged domain).');
   }
 
-  // DMARC check
-  const dmarc = parsedEmail?.auth?.dmarc?.result || 'UNKNOWN';
-  if (dmarc === 'FAIL') {
+  if (activeAuth?.observedEvidence?.dnsForensics?.dkim?.some(d => d.isRevoked)) {
     headerScore += 5;
-    headerReasons.push('❌ DMARC policy alignment FAILED (mandated quarantine/reject rule triggered).');
+    headerReasons.push('⚠️ DKIM Public Key is revoked (empty p= tag in DNS).');
+  }
+
+  // DMARC check
+  const dmarcVerdict = (activeAuth?.inferredEvidence?.dmarcEffectiveStatus || activeAuth?.observedEvidence?.mtaAuthentication?.observedDmarcVerdict || parsedEmail?.auth?.dmarc?.result || 'UNKNOWN').toUpperCase();
+  if (dmarcVerdict === 'FAIL') {
+    const policy = activeAuth?.observedEvidence?.dnsForensics?.dmarc?.policy || 'reject';
+    const pts = policy === 'reject' ? 5 : policy === 'quarantine' ? 5 : 4;
+    headerScore += pts;
+    headerReasons.push(`❌ DMARC policy alignment FAILED (mandated ${policy} rule triggered).`);
+  } else if (dmarcVerdict === 'NO_POLICY' && activeAuth) {
+    headerScore += 2;
+    headerReasons.push('ℹ️ No DMARC policy published for sending domain.');
+  }
+
+  // Display Name Spoofing
+  if (activeAuth?.inferredEvidence?.displayNameSpoofingDetected) {
+    headerScore += 5;
+    headerReasons.push('🚨 Display Name Impersonation: Display name mimics trusted domain while sender domain differs.');
   }
 
   // From vs Reply-To Mismatch
-  if (parsedEmail?.replyToMismatch) {
+  if (activeAuth?.inferredEvidence?.replyToMismatch || parsedEmail?.replyToMismatch) {
     headerScore += 4;
-    headerReasons.push(`⚠️ Reply-To mismatch: Replies directed to external domain "${parsedEmail.replyToParsed?.domain}" instead of sender "${parsedEmail.fromParsed?.domain}".`);
+    const rDomain = activeAuth?.observedEvidence?.headers?.replyTo?.domain || parsedEmail?.replyToParsed?.domain || 'external';
+    const fDomain = activeAuth?.observedEvidence?.headers?.from?.domain || parsedEmail?.fromParsed?.domain || 'sender';
+    headerReasons.push(`⚠️ Reply-To mismatch: Replies directed to external domain "${rDomain}" instead of sender "${fDomain}".`);
   }
 
   // From vs Return-Path Mismatch
-  if (parsedEmail?.returnPathMismatch) {
+  if (parsedEmail?.returnPathMismatch || (activeAuth && activeAuth.returnPathDomain && activeAuth.fromDomain && activeAuth.returnPathDomain !== activeAuth.fromDomain)) {
     headerScore += 3;
-    headerReasons.push(`⚠️ Return-Path mismatch: Bounces routed to untrusted domain "${parsedEmail.returnPathParsed?.domain}".`);
+    const retDomain = activeAuth?.returnPathDomain || parsedEmail?.returnPathParsed?.domain || 'untrusted';
+    headerReasons.push(`⚠️ Return-Path mismatch: Bounces routed to untrusted domain "${retDomain}".`);
   }
 
   const clampedHeaderScore = Math.min(weights.headerForensics, headerScore);

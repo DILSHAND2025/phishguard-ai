@@ -24,8 +24,9 @@ import { resolveIPGeo } from './services/geoAsnService';
 import { defaultGeoService } from './services/geoLocationService';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from './services/evidenceFusion';
 import { correlateThreatCampaigns } from './services/campaignCorrelator';
-import { getStoredCases, createCaseFromAnalysis } from './services/caseStore';
+import { createCaseFromAnalysis } from './services/caseStore';
 import { analyzeAttachment } from './services/attachmentForensics';
+import { analyzeEmailAuthentication } from './services/emailAuthService';
 import { defaultHashReputationService } from './services/hashReputationService';
 import { SYNTHETIC_SCENARIOS } from './data/syntheticScenarios';
 
@@ -230,21 +231,45 @@ function App() {
                       geoList[0] || 
                       await resolveIPGeo(parsedEmail.originatingIP || '185.220.101.45');
 
-      // 4. Multi-Factor Evidence Fusion
+      // 5. Live Email Authentication & DNS Forensics
+      let emailAuth = null;
+      const rawSnippetText = parsedEmail.rawSnippet || (typeof emailInput === 'string' ? emailInput : '');
+      if (rawSnippetText) {
+        try {
+          const res = await fetch('http://localhost:5000/api/email-authentication', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: rawSnippetText }),
+            signal: AbortSignal.timeout(3000)
+          });
+          if (res.ok) {
+            emailAuth = await res.json();
+          }
+        } catch {
+          // Backend gateway offline or unreachable, fall back to direct service
+        }
+        if (!emailAuth) {
+          emailAuth = await analyzeEmailAuthentication(rawSnippetText);
+        }
+      }
+      parsedEmail.emailAuth = emailAuth;
+
+      // 6. Multi-Factor Evidence Fusion
       const fusion = calculateEvidenceFusion({
         parsedEmail,
         aiThreat,
         iocs,
         geoInfo,
         geoList,
+        emailAuth,
         weights: fusionWeights
       });
 
-      // 5. Threat Campaign Correlation
+      // 7. Threat Campaign Correlation
       const campaigns = correlateThreatCampaigns([parsedEmail]);
       const primaryCampaign = campaigns[0] || null;
 
-      // 6. Case Creation / Linkage
+      // 8. Case Creation / Linkage
       const caseItem = createCaseFromAnalysis({
         email: parsedEmail,
         fusion,
@@ -255,6 +280,7 @@ function App() {
 
       const analysisResult = {
         email: parsedEmail,
+        emailAuth,
         iocs,
         aiThreat,
         geoInfo,
@@ -306,6 +332,8 @@ function App() {
         aiThreat: currentAnalysis.aiThreat,
         iocs: currentAnalysis.iocs,
         geoInfo: currentAnalysis.geoInfo,
+        geoList: currentAnalysis.geoList,
+        emailAuth: currentAnalysis.emailAuth,
         weights: newWeights
       });
       setCurrentAnalysis(prev => ({ ...prev, fusion: updatedFusion }));

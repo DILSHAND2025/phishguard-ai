@@ -140,7 +140,7 @@ export async function queryMLPrediction(text) {
       const scriptPath = path.resolve(process.cwd(), 'ml', 'predict.py');
       const stdout = execFileSync('python', [scriptPath, '--text', text], {
         encoding: 'utf-8',
-        timeout: 4000
+        timeout: 15000
       });
       const data = JSON.parse(stdout.trim());
       if (data && data.prediction) {

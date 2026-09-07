@@ -20,6 +20,7 @@ import {
   Cpu
 } from 'lucide-react';
 import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
+import { EmailAuthenticationCard } from '../components/dashboard/EmailAuthenticationCard.jsx';
 
 export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
   const email = currentAnalysis?.email;
@@ -445,6 +446,9 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
 
           {/* 📎 ATTACHMENT FORENSICS Section */}
           <AttachmentForensicsCard attachments={email?.attachments || []} />
+
+          {/* 🛡️ EMAIL AUTHENTICATION & DNS FORENSICS Section */}
+          <EmailAuthenticationCard emailAuth={currentAnalysis?.emailAuth || email?.emailAuth} />
 
         </div>
 

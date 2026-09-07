@@ -28,6 +28,7 @@ import {
 import { parseEmailContent } from '../services/emailParser';
 import { SYNTHETIC_SCENARIOS } from '../data/syntheticScenarios';
 import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
+import { EmailAuthenticationCard } from '../components/dashboard/EmailAuthenticationCard.jsx';
 
 const PIPELINE_STAGES = [
   { id: 1, name: 'Email Parsing', detail: 'Decoding MIME envelope, headers & boundary structures', duration: '34ms' },
@@ -647,6 +648,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           {/* 📎 ATTACHMENT FORENSICS Deep Inspection Section */}
           {emailData.attachments && emailData.attachments.length > 0 && (
             <AttachmentForensicsCard attachments={emailData.attachments} />
+          )}
+
+          {/* 🛡️ EMAIL AUTHENTICATION & DNS FORENSICS Section */}
+          {(emailData.emailAuth || currentAnalysis?.emailAuth) && (
+            <EmailAuthenticationCard emailAuth={emailData.emailAuth || currentAnalysis?.emailAuth} />
           )}
 
           {/* Optional Raw Headers Snippet */}

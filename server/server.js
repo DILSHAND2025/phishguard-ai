@@ -16,6 +16,7 @@ import http from 'node:http';
 import https from 'node:https';
 import url from 'node:url';
 import { analyzeAttachment } from '../src/services/attachmentForensics.js';
+import { analyzeEmailAuthentication } from '../src/services/emailAuthService.js';
 
 const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
@@ -118,7 +119,7 @@ const server = http.createServer(async (req, res) => {
         // 2. Direct CLI fallback using Python ml/predict.py
         try {
           const { execFile } = await import('node:child_process');
-          execFile('python', ['ml/predict.py', '--text', text], { timeout: 3500 }, (err, stdout, stderr) => {
+          execFile('python', ['ml/predict.py', '--text', text], { timeout: 15000 }, (err, stdout, stderr) => {
             if (err || stderr) {
               return sendJson(res, 503, {
                 prediction: "UNAVAILABLE",
@@ -495,6 +496,67 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 500, {
           status: 'ERROR',
           error: 'Failed to process attachment static analysis',
+          details: err.message
+        });
+      }
+    });
+    return;
+  }
+
+  // Email Authentication & DNS Forensics Endpoint: POST /api/email-authentication
+  if ((pathname === '/api/email-authentication' || pathname === '/api/email/authenticate') && req.method === 'POST') {
+    const contentType = req.headers['content-type'] || '';
+    const chunks = [];
+    let receivedBytes = 0;
+    const MAX_BYTES = 10 * 1024 * 1024; // 10MB safety threshold
+
+    req.on('data', chunk => {
+      receivedBytes += chunk.length;
+      if (receivedBytes > MAX_BYTES) {
+        req.destroy(new Error('Payload exceeds maximum allowed size (10MB)'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on('error', (err) => {
+      return sendJson(res, 413, {
+        status: 'ERROR',
+        error: err.message || 'Request payload too large'
+      });
+    });
+
+    req.on('end', async () => {
+      try {
+        const fullBuffer = Buffer.concat(chunks);
+        let rawEmail = '';
+
+        if (contentType.includes('application/json')) {
+          const jsonBody = JSON.parse(fullBuffer.toString('utf-8') || '{}');
+          rawEmail = jsonBody.email || jsonBody.rawEmail || jsonBody.text || '';
+        } else {
+          rawEmail = fullBuffer.toString('utf-8');
+        }
+
+        if (!rawEmail || !rawEmail.trim()) {
+          return sendJson(res, 400, {
+            success: false,
+            status: 'INVALID_INPUT',
+            error: 'Missing or empty email content in request payload'
+          });
+        }
+
+        const authResult = await analyzeEmailAuthentication(rawEmail);
+        return sendJson(res, 200, {
+          success: true,
+          status: 'SUCCESS',
+          ...authResult
+        });
+      } catch (err) {
+        return sendJson(res, 500, {
+          success: false,
+          status: 'ERROR',
+          error: 'Failed to process email authentication forensics',
           details: err.message
         });
       }
