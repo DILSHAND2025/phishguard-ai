@@ -40,22 +40,29 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
   const handleTestConnection = async () => {
     const target = backendUrl.trim().replace(/\/$/, '');
     setConnectionStatus('testing');
-    setConnectionMsg('Pinging gateway /api/health...');
-    try {
-      const endpoint = target ? `${target}/api/health` : '/api/health';
-      const res = await fetch(endpoint, { signal: AbortSignal.timeout(4000) });
-      if (res.ok) {
-        const data = await res.json();
-        setConnectionStatus('success');
-        setConnectionMsg(`Online: ${data.service || 'Gateway'} (SIH-2026)`);
-      } else {
-        setConnectionStatus('error');
-        setConnectionMsg(`Gateway returned HTTP ${res.status}`);
+    setConnectionMsg('Pinging gateway...');
+    const candidates = [
+      target ? `${target}/api/health` : '/api/health',
+      target ? `${target}/health` : '/health',
+      target ? `${target}/` : '/'
+    ];
+
+    for (const endpoint of candidates) {
+      try {
+        const res = await fetch(endpoint, { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined });
+        if (res.ok) {
+          const data = await res.json();
+          setConnectionStatus('success');
+          setConnectionMsg(`Online: ${data.service || 'MAVERICK Backend'}`);
+          return;
+        }
+      } catch {
+        // Try next candidate
       }
-    } catch (err) {
-      setConnectionStatus('error');
-      setConnectionMsg(`Cannot reach gateway (${err.message || 'Offline'})`);
     }
+
+    setConnectionStatus('error');
+    setConnectionMsg('Unable to reach backend gateway');
   };
 
   const handleSaveAll = () => {

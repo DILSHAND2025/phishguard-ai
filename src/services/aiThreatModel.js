@@ -119,7 +119,7 @@ export async function queryMLPrediction(text) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(2500)
+        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
       });
       if (res.ok) {
         const data = await res.json();
