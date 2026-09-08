@@ -26,6 +26,7 @@ export { isPrivateOrReservedIP };
 const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
 const ABUSE_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
+const PYTHON_CMD = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
 
 const CACHE = new Map();
 
@@ -81,15 +82,23 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
 
-  // Health check
-  if (pathname === '/api/health') {
+  // Root and Health check
+  if (pathname === '/' || pathname === '/health' || pathname === '/api/health') {
     return sendJson(res, 200, {
       status: 'online',
-      service: 'MAVERICK Intelligence Gateway',
+      service: 'MAVERICK Intelligence & Machine Learning Gateway',
       environment: 'SIH-2026',
       vtKeyConfigured: Boolean(VT_API_KEY),
       abuseKeyConfigured: Boolean(ABUSE_API_KEY),
-      cachedEntries: CACHE.size
+      cachedEntries: CACHE.size,
+      endpoints: [
+        'POST /predict or /api/ml/predict',
+        'GET  /api/health',
+        'GET  /api/geoip?ip=<ip>',
+        'GET  /api/enrich?ioc=<ioc>&type=<IP|DOMAIN|HASH>',
+        'POST /api/forensic-report/compile',
+        'POST /api/forensic-report/pdf'
+      ]
     });
   }
 
@@ -124,7 +133,7 @@ const server = http.createServer(async (req, res) => {
         // 2. Direct CLI fallback using Python ml/predict.py
         try {
           const { execFile } = await import('node:child_process');
-          execFile('python', ['ml/predict.py', '--text', text], { timeout: 15000 }, (err, stdout, stderr) => {
+          execFile(PYTHON_CMD, ['ml/predict.py', '--text', text], { timeout: 15000 }, (err, stdout, stderr) => {
             if (err || stderr) {
               return sendJson(res, 503, {
                 prediction: "UNAVAILABLE",
@@ -645,8 +654,8 @@ const server = http.createServer(async (req, res) => {
 
 const isDirectExecution = Boolean(process.argv[1] && (process.argv[1].endsWith('server.js') || process.argv[1].endsWith('server')));
 if (isDirectExecution) {
-  server.listen(PORT, () => {
-    console.log(`[+] MAVERICK Intelligence Gateway running on http://localhost:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[+] MAVERICK Intelligence Gateway running on http://0.0.0.0:${PORT}`);
     console.log(`[+] VirusTotal configured: ${Boolean(VT_API_KEY)} | AbuseIPDB configured: ${Boolean(ABUSE_API_KEY)}`);
   });
 }

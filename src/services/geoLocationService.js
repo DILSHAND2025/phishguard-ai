@@ -17,6 +17,7 @@
  */
 
 import { isValidIP, isPrivateIP } from './emailParser.js';
+import { getApiBaseUrl } from './apiConfig.js';
 
 // Mandatory CERT-In & Court Admissibility Legal Disclaimer
 export const GEO_LEGAL_DISCLAIMER =
@@ -45,15 +46,16 @@ export class BaseGeoProvider {
 export class BackendGeoProvider extends BaseGeoProvider {
   constructor(baseUrl = '') {
     super('MAVERICK Backend Gateway');
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl || getApiBaseUrl();
   }
 
   async lookup(ip) {
     const endpoints = [
-      `${this.baseUrl}/api/geoip?ip=${encodeURIComponent(ip)}`,
+      this.baseUrl ? `${this.baseUrl}/api/geoip?ip=${encodeURIComponent(ip)}` : '',
+      `/api/geoip?ip=${encodeURIComponent(ip)}`,
       `http://localhost:5000/api/geoip?ip=${encodeURIComponent(ip)}`,
       `http://127.0.0.1:5000/api/geoip?ip=${encodeURIComponent(ip)}`
-    ];
+    ].filter(Boolean);
 
     for (const endpoint of endpoints) {
       try {

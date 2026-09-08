@@ -12,6 +12,8 @@
  * - Forensic analysis continues unimpeded with remaining evidence layers
  */
 
+import { getApiBaseUrl } from './apiConfig.js';
+
 // Calibrated high-risk phishing linguistic patterns for supplementary explainability
 export const LINGUISTIC_THREAT_PATTERNS = [
   {
@@ -102,11 +104,14 @@ export async function queryMLPrediction(text) {
     };
   }
 
+  const baseUrl = getApiBaseUrl();
   const endpoints = [
+    baseUrl ? `${baseUrl}/predict` : '',
+    baseUrl ? `${baseUrl}/api/ml/predict` : '',
     'http://127.0.0.1:8000/predict',
     '/api/ml/predict',
     '/predict'
-  ];
+  ].filter(Boolean);
 
   for (const endpoint of endpoints) {
     try {

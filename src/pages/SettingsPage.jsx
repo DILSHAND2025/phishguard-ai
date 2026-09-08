@@ -20,10 +20,12 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
   const [weights, setWeights] = useState(fusionWeights || DEFAULT_FUSION_WEIGHTS);
   const [savedSuccess, setSavedSuccess] = useState(false);
   
-  // API Keys (stored locally for demo/client mode)
+  // API Keys & Backend Gateway (stored locally for demo/client mode)
   const [vtApiKey, setVtApiKey] = useState(() => localStorage.getItem('maverick_vt_key') || '');
   const [abuseApiKey, setAbuseApiKey] = useState(() => localStorage.getItem('maverick_abuse_key') || '');
-  const [activeGateway, setActiveGateway] = useState(false);
+  const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('maverick_backend_url') || '');
+  const [connectionStatus, setConnectionStatus] = useState(null); // null | 'testing' | 'success' | 'error'
+  const [connectionMsg, setConnectionMsg] = useState('');
 
   const totalPoints = Object.values(weights).reduce((acc, v) => acc + Number(v), 0);
 
@@ -35,12 +37,34 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
     }));
   };
 
+  const handleTestConnection = async () => {
+    const target = backendUrl.trim().replace(/\/$/, '');
+    setConnectionStatus('testing');
+    setConnectionMsg('Pinging gateway /api/health...');
+    try {
+      const endpoint = target ? `${target}/api/health` : '/api/health';
+      const res = await fetch(endpoint, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const data = await res.json();
+        setConnectionStatus('success');
+        setConnectionMsg(`Online: ${data.service || 'Gateway'} (SIH-2026)`);
+      } else {
+        setConnectionStatus('error');
+        setConnectionMsg(`Gateway returned HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setConnectionStatus('error');
+      setConnectionMsg(`Cannot reach gateway (${err.message || 'Offline'})`);
+    }
+  };
+
   const handleSaveAll = () => {
     if (onUpdateWeights) {
       onUpdateWeights(weights);
     }
     localStorage.setItem('maverick_vt_key', vtApiKey);
     localStorage.setItem('maverick_abuse_key', abuseApiKey);
+    localStorage.setItem('maverick_backend_url', backendUrl.trim());
     localStorage.setItem('maverick_weights', JSON.stringify(weights));
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
@@ -265,6 +289,62 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
         {/* Right 1 Col: API Integrations & Gateway Status */}
         <div className="space-y-6">
           
+          {/* Cloud Backend Gateway (Render / Custom) */}
+          <div className="rounded-xl bg-[#09101e] border border-cyan-500/40 p-5 shadow-lg space-y-4 font-mono text-xs shadow-[0_0_20px_rgba(6,182,212,0.1)]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-cyan-400" />
+                <h3 className="font-bold text-white uppercase tracking-wider">
+                  Render / Cloud Backend
+                </h3>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-bold">
+                GATEWAY
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+              Connect your Vercel frontend to your live Render backend for FastAPI ML inference, VirusTotal, AbuseIPDB, and PDF export.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-[11px] text-slate-300 block">Render Backend Gateway URL</label>
+              <input
+                type="text"
+                value={backendUrl}
+                onChange={(e) => setBackendUrl(e.target.value)}
+                placeholder="https://maverick-backend.onrender.com"
+                className="w-full p-2.5 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 placeholder-slate-600 text-xs"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Leave empty to use default relative endpoint or local dev proxy.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={connectionStatus === 'testing'}
+                className="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>{connectionStatus === 'testing' ? 'Testing...' : 'Ping Gateway'}</span>
+              </button>
+
+              {connectionStatus === 'success' && (
+                <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{connectionMsg}</span>
+                </span>
+              )}
+              {connectionStatus === 'error' && (
+                <span className="text-[11px] text-red-400 truncate max-w-[180px]">
+                  {connectionMsg}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Threat Feeds Integration Card */}
           <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 shadow-lg space-y-4 font-mono text-xs">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2">

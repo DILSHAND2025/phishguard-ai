@@ -8,6 +8,8 @@
  * returns status: "UNAVAILABLE".
  */
 
+import { getApiBaseUrl } from './apiConfig.js';
+
 export class BaseReputationProvider {
   constructor(name) {
     this.name = name;
@@ -25,7 +27,7 @@ export class BaseReputationProvider {
 export class GatewayHashProvider extends BaseReputationProvider {
   constructor(baseUrl = '') {
     super('MAVERICK Intelligence Gateway (VirusTotal Integration)');
-    this.baseUrl = baseUrl || (typeof window !== 'undefined' ? '' : 'http://localhost:5000');
+    this.baseUrl = baseUrl || getApiBaseUrl();
   }
 
   async lookup(hash) {

@@ -1,0 +1,4 @@
+# Enforce Unix LF line endings for shell scripts and docker configurations
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.py text eol=lf

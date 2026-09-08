@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: maverick-backend
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+      - key: ABUSEIPDB_API_KEY
+        sync: false

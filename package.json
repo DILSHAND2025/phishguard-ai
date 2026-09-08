@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "node server/server.js",
+    "start:backend": "sh scripts/start-backend.sh",
     "dev": "vite",
     "server": "node server/server.js",
     "ml": "python ml/predict.py --serve --port 8000",
