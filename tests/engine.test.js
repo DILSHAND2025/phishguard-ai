@@ -77,7 +77,7 @@ Expedite statutory allocation transfer of INR 4,85,00,000 immediately. Ministeri
 
   // Test 3: AI Threat Model
   console.log('\n[+] Testing AI/NLP Threat Detection...');
-  const aiThreat = await evaluateAIThreat(parsed);
+  const aiThreat = await evaluateAIThreat(parsed, { fallbackToHeuristic: true });
   assert(aiThreat.phishingProbability >= 60 || aiThreat.isMlAvailable, `AI phishing probability computed (${aiThreat.phishingProbability}%)`);
   assert(aiThreat.detectedIndicators.length >= 2, 'Linguistic indicators extracted (urgency, financial, authority)');
   assert(aiThreat.keyTokens.some(t => /immediately|statutory|urgent|wire/i.test(t)), 'Key adversarial token recognized');

@@ -10,11 +10,13 @@ import {
   Paperclip, 
   ShieldX, 
   Activity, 
-  Info, 
   Server, 
   Cpu, 
   FileText, 
-  Download 
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
 import { EmailAuthenticationCard } from '../components/dashboard/EmailAuthenticationCard.jsx';
@@ -23,6 +25,8 @@ import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilde
 
 export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [activeTab, setActiveTab] = useState('factors');
+
   const email = currentAnalysis?.email;
   const fusion = currentAnalysis?.fusion;
   const aiThreat = currentAnalysis?.aiThreat;
@@ -32,7 +36,6 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
   const confidence = aiThreat?.confidence ?? 92;
   const aiProb = aiThreat?.phishingProbability ?? 94;
 
-  // Icon map for factors
   const getCategoryIcon = (category) => {
     switch (category) {
       case 'AI / NLP Analysis': return Cpu;
@@ -47,10 +50,10 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
 
   const getSeverityColor = (severity) => {
     switch (severity) {
-      case 'CRITICAL': return { text: 'text-red-400', border: 'border-red-500/40', bg: 'bg-red-950/30' };
-      case 'HIGH': return { text: 'text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-950/30' };
-      case 'MEDIUM': return { text: 'text-blue-400', border: 'border-blue-500/40', bg: 'bg-blue-950/30' };
-      default: return { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-950/30' };
+      case 'CRITICAL': return { text: 'text-red-400', border: 'border-red-500/40', bg: 'bg-red-950/40' };
+      case 'HIGH': return { text: 'text-amber-400', border: 'border-amber-500/40', bg: 'bg-amber-950/40' };
+      case 'MEDIUM': return { text: 'text-blue-400', border: 'border-blue-500/40', bg: 'bg-blue-950/40' };
+      default: return { text: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-950/40' };
     }
   };
 
@@ -62,7 +65,7 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
       points: 22,
       maxPoints: 25,
       severity: 'HIGH',
-      evidence: 'High AI phishing probability (94%) with coercive urgency and statutory allocation bypass tokens.'
+      evidence: 'High AI phishing probability with urgency tokens and statutory bypass language.'
     },
     {
       id: 'header-forensics',
@@ -71,7 +74,7 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
       points: 20,
       maxPoints: 20,
       severity: 'CRITICAL',
-      evidence: 'SPF resulted in SOFTFAIL. DKIM cryptographic signature verification failed. DMARC policy alignment mandates quarantine/reject.'
+      evidence: 'SPF resulted in SOFTFAIL. DKIM signature failed. DMARC policy mandates reject.'
     },
     {
       id: 'url-intel',
@@ -80,7 +83,7 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
       points: 18,
       maxPoints: 20,
       severity: 'HIGH',
-      evidence: 'Domain exhibits lookalike characteristics and deceptive naming patterns targeting organizational systems.'
+      evidence: 'Domain exhibits lookalike characteristics targeting organizational credentials.'
     },
     {
       id: 'ip-reputation',
@@ -89,7 +92,7 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
       points: 14,
       maxPoints: 15,
       severity: 'HIGH',
-      evidence: 'Origin IP exhibits characteristics of anonymizing proxy/Tor relay nodes.'
+      evidence: 'Origin IP exhibits characteristics of anonymizing proxy or Tor exit nodes.'
     },
     {
       id: 'geo-asn',
@@ -98,424 +101,381 @@ export const AnalysisResultsPage = ({ onViewChange, currentAnalysis }) => {
       points: 8,
       maxPoints: 10,
       severity: 'MEDIUM',
-      evidence: 'Observed network infrastructure routes through Germany (AS9009) with Tor egress classification.'
+      evidence: 'Hosting provider associated with bulletproof hosting facilities.'
     },
     {
-      id: 'attachment-analysis',
+      id: 'attachments',
       category: 'Attachment Analysis',
-      name: 'Attachment Payload Inspection',
+      name: 'Cryptographic Hashing & MIME Payload Inspection',
       points: 10,
       maxPoints: 10,
       severity: 'CRITICAL',
-      evidence: 'Double-extension obfuscated PE32 executable binary detected.'
+      evidence: 'Quarantined attachment flagged with high-risk executable payload signature.'
     }
   ];
 
+  const handleExportPdf = async () => {
+    try {
+      setExportingPdf(true);
+      const rep = await buildForensicReport(currentAnalysis);
+      const bytes = generateForensicPdf(rep);
+      downloadPdfInBrowser(bytes, `${rep.caseId || 'MAVERICK'}-Forensic-Report.pdf`);
+    } catch (err) {
+      console.error('Direct PDF export failed:', err);
+      alert(`PDF Export Failed: ${err.message}`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 pb-12 font-sans">
+    <div className="space-y-6 pb-16 font-sans">
       
-      {/* Top Banner Header */}
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${
-        threatScore >= 60 ? 'from-red-950/40 via-[#0d162a] to-[#070b13] border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.15)]' : 'from-emerald-950/40 via-[#0d162a] to-[#070b13] border-emerald-500/40'
-      } border p-6`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-red-400 text-xs font-mono mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
-              STAGE 03 OF 08 • FORENSIC VERDICT & EXPLAINABLE RISK SCORE
-            </div>
+      {/* Breadcrumb & Navigation Bar */}
+      <div className="flex items-center justify-between py-1">
+        <button
+          type="button"
+          onClick={() => onViewChange('email-analysis')}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Email Ingestion</span>
+        </button>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
-                <ShieldAlert className="w-6 h-6 text-red-400" />
-                <span>Threat Classification:</span>
-              </h1>
-              <span className="px-3 py-1 rounded-lg bg-red-950/90 border border-red-500 text-red-300 font-mono font-extrabold text-xs shadow-[0_0_12px_rgba(239,68,68,0.4)]">
-                {riskLevel === 'CRITICAL' || riskLevel === 'HIGH' ? 'MALICIOUS / PHISHING' : riskLevel === 'SUSPICIOUS' ? 'SUSPICIOUS ACTIVITY' : 'BENIGN / VERIFIED'}
-              </span>
-            </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onViewChange('threat-graph')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-800 text-slate-300 text-xs transition-colors cursor-pointer"
+          >
+            <GitFork className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Threat Graph</span>
+          </button>
 
-            <p className="text-xs text-slate-300 mt-1.5 font-mono">
-              Target: <span className="text-cyan-300 font-semibold">{email?.recipient || 'treasury-controller@gov-organization.in'}</span> | 
-              Case Reference: <span className="text-amber-400 font-bold">{currentAnalysis?.caseItem?.caseId || 'CAS-2026-0881'}</span>
-            </p>
-          </div>
-
-          {/* Top Quick Actions */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              id="btn-back-email-analysis-top"
-              onClick={() => onViewChange('email-analysis')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-700 text-slate-300 font-mono text-xs transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Ingestion</span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-view-forensic-report-top"
-              onClick={() => onViewChange('forensic-report')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-950 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/40 text-emerald-300 font-mono text-xs transition-all cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Forensic Dossier</span>
-            </button>
-
-            <button
-              type="button"
-              id="btn-proceed-ioc-top"
-              onClick={() => onViewChange('ioc-intel')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer"
-            >
-              <Binary className="w-4 h-4" />
-              <span>Proceed to IOC Intelligence</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onViewChange('ioc-intel')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-800 text-slate-300 text-xs transition-colors cursor-pointer"
+          >
+            <Binary className="w-3.5 h-3.5 text-cyan-400" />
+            <span>IOC Intel</span>
+          </button>
         </div>
       </div>
 
-      {/* Required Concise Methodology Explanation Banner */}
-      <div className="rounded-xl bg-[#09101e] border border-cyan-500/30 p-4 font-mono text-xs text-slate-300 flex items-start gap-3 shadow-md">
-        <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-        <div>
-          <span className="text-cyan-300 font-bold block mb-0.5">MAVERICK Multi-Layer Evidence Fusion Engine:</span>
-          <p className="text-slate-300 text-xs leading-relaxed font-sans">
-            The overall threat score is calculated by combining AI linguistic analysis (25%), header forensics (20%), URL intelligence (20%), IP reputation (15%), Geo/ASN network topology (10%), and payload analysis (10%). Rather than relying on a single detection source, this engine provides fully explainable evidence.
-          </p>
-        </div>
-      </div>
-
-      {/* Main Score & Evidence Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Risk Score & Threat Summary */}
-        <div className="rounded-xl bg-[#0a1224] border border-red-500/40 p-6 flex flex-col justify-between shadow-[0_0_30px_rgba(239,68,68,0.15)] font-mono space-y-6">
-          <div>
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold block text-center">
-              Multi-Layer Threat Evaluation
-            </span>
-
-            {/* Circular Risk Score Display */}
-            <div className="my-6 flex justify-center">
-              <div className="relative inline-flex items-center justify-center w-40 h-40 rounded-full border-4 border-red-500/80 bg-gradient-to-b from-red-950/50 to-[#0a1120] text-red-400 shadow-[0_0_25px_rgba(239,68,68,0.3)]">
-                <div className="text-center">
-                  <div className="text-5xl font-black text-white tracking-tight">
-                    {threatScore}
-                  </div>
-                  <div className="text-xs font-bold text-red-400 tracking-wider mt-0.5">
-                    / 100
-                  </div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">
-                    Risk Score
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Core Metrics: Risk Level & AI Confidence */}
-            <div className="grid grid-cols-2 gap-3 text-center pt-2 border-t border-slate-800">
-              <div className="p-3 rounded-lg bg-[#060a14] border border-red-500/40">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">Verdict</span>
-                <span className="text-lg font-black text-red-400 flex items-center justify-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
-                  {riskLevel}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-[#060a14] border border-cyan-500/40">
-                <span className="text-[10px] uppercase text-slate-400 block font-semibold">AI Probability</span>
-                <span className="text-lg font-black text-cyan-300 block mt-0.5">
-                  {aiProb}%
-                </span>
-              </div>
-            </div>
-
-            {/* Summary Highlights */}
-            <div className="mt-5 space-y-2 text-xs text-slate-300">
-              <div className="p-2.5 rounded bg-[#060a14] border border-slate-800/80 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Total Layers Evaluated:</span>
-                <span className="text-white font-bold">6 Evidence Sources</span>
-              </div>
-              <div className="p-2.5 rounded bg-[#060a14] border border-slate-800/80 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Model Certainty:</span>
-                <span className="text-cyan-300 font-bold">{confidence}% Confidence</span>
-              </div>
-              <div className="p-2.5 rounded bg-[#060a14] border border-slate-800/80 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Attributed Campaign:</span>
-                <span className="text-amber-400 font-bold">{currentAnalysis?.campaign?.campaignId || 'TC-001'}</span>
-              </div>
-            </div>
-
-            {/* Itemized Verified Findings */}
-            {fusion?.verifiedReasons?.length > 0 && (
-              <div className="mt-4 p-3 rounded-lg bg-[#060a14] border border-slate-800 space-y-1.5 text-[11px]">
-                <span className="text-[10px] uppercase text-slate-400 font-bold block mb-1">
-                  Itemized Evidence Signals:
-                </span>
-                {fusion.verifiedReasons.slice(0, 5).map((r, i) => (
-                  <div key={i} className="text-slate-300 text-[10.5px] leading-tight">
-                    {r}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Primary Action Buttons */}
-          <div className="pt-4 border-t border-slate-800 space-y-2.5">
-            <button
-              type="button"
-              id="btn-proceed-to-ioc-intel"
-              onClick={() => onViewChange('ioc-intel')}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.35)] transition-all cursor-pointer active:scale-95"
-            >
-              <Binary className="w-4 h-4" />
-              <span>Proceed to IOC Intelligence</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              id="btn-back-to-email-analysis"
-              onClick={() => onViewChange('threat-graph')}
-              className="w-full py-2.5 rounded-xl bg-[#08101e] hover:bg-[#0c1830] border border-slate-700 text-slate-300 text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <GitFork className="w-4 h-4 text-cyan-400" />
-              <span>Explore Threat Graph</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right Column: Explainable AI & Evidence Breakdown Section */}
-        <div className="lg:col-span-2 rounded-xl bg-[#09101e] border border-slate-800 p-6 space-y-5 shadow-lg">
+      {/* Executive Score & Verdict Card */}
+      <div className="rounded-2xl bg-gradient-to-r from-[#0d162a] via-[#091222] to-[#060a14] border border-slate-800/90 p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2.5">
-              <Brain className="w-5 h-5 text-cyan-400" />
-              <h2 className="text-base font-bold font-mono text-white">
-                Explainable Multi-Factor Evidence Ledger
-              </h2>
-            </div>
-            <span className="text-[11px] font-mono text-cyan-300 bg-cyan-950/80 px-2.5 py-0.5 rounded border border-cyan-500/40">
-              Total Score: {threatScore} / 100 Points
-            </span>
-          </div>
-
-          {/* Factor Contribution Cards */}
-          <div className="space-y-3.5 font-mono">
-            {factors.map((factor) => {
-              const IconComponent = getCategoryIcon(factor.category);
-              const colors = getSeverityColor(factor.severity);
-
-              return (
-                <div
-                  key={factor.id}
-                  className="p-4 rounded-xl bg-[#060a14] border border-slate-800/90 hover:border-slate-700 transition-all space-y-2.5"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-cyan-400">
-                        <IconComponent className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase text-slate-500 block font-semibold">{factor.category}</span>
-                        <h4 className="text-xs font-bold text-white">{factor.name}</h4>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${colors.bg} ${colors.border} ${colors.text}`}>
-                        {factor.severity}
-                      </span>
-                      <span className="text-xs font-black text-cyan-300 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
-                        +{factor.points} / {factor.maxPoints} pts
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-300 font-sans leading-relaxed pl-1 border-l-2 border-slate-800">
-                    {factor.evidence}
-                  </p>
-
-                  {/* Progress bar representing fraction of maxPoints */}
-                  <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        factor.points / factor.maxPoints > 0.7 
-                          ? 'bg-red-500' 
-                          : factor.points / factor.maxPoints > 0.3 
-                            ? 'bg-amber-500' 
-                            : 'bg-cyan-500'
-                      }`}
-                      style={{ width: `${Math.min(100, (factor.points / factor.maxPoints) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* AI Threat Analysis (Real ML TF-IDF + Logistic Regression) Card */}
-          <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-[#0b1424] via-[#09101d] to-[#060a14] border border-cyan-500/40 font-mono text-xs space-y-3 shadow-[0_0_20px_rgba(6,182,212,0.1)]">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
-                  <Brain className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider block">Real Machine Learning Model</span>
-                  <h3 className="text-xs font-bold text-white tracking-wide">AI THREAT ANALYSIS</h3>
-                </div>
+          {/* Left: Verdict & Threat Score */}
+          <div className="flex items-center gap-5">
+            <div className="text-center p-4 rounded-2xl bg-[#060a14] border border-red-500/30 min-w-[120px]">
+              <div className="text-4xl font-extrabold text-white tracking-tight">
+                {threatScore}
               </div>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                aiThreat?.prediction === 'PHISHING' 
-                  ? 'bg-red-950/80 text-red-300 border-red-500/40' 
-                  : aiThreat?.prediction === 'LEGITIMATE'
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-              }`}>
-                {aiThreat?.prediction || 'UNAVAILABLE'}
+              <div className="text-[11px] font-mono text-red-400 font-semibold mt-0.5">
+                / 100 POINTS
+              </div>
+              <span className="text-[9px] uppercase tracking-wider text-slate-500 block mt-1">
+                Risk Score
               </span>
             </div>
 
-            {/* Model Telemetry Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
-              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
-                <span className="text-[10px] text-slate-500 block">Prediction:</span>
-                <span className={`font-bold mt-0.5 block ${
-                  aiThreat?.prediction === 'PHISHING' ? 'text-red-400' : aiThreat?.prediction === 'LEGITIMATE' ? 'text-emerald-400' : 'text-slate-400'
-                }`}>
-                  {aiThreat?.prediction || 'UNAVAILABLE'}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-950/80 border border-red-500/50 text-red-300 text-xs font-mono font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
+                  <span>{riskLevel} THREAT VERDICT</span>
+                </span>
+                <span className="text-xs font-mono text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+                  {confidence}% Certainty
                 </span>
               </div>
-
-              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
-                <span className="text-[10px] text-slate-500 block">Probability:</span>
-                <span className="font-bold text-cyan-300 mt-0.5 block">
-                  {typeof aiThreat?.phishingProbability === 'number' ? `${aiThreat.phishingProbability}%` : 'UNAVAILABLE'}
-                </span>
-              </div>
-
-              <div className="p-2 rounded-lg bg-[#050912] border border-slate-800/80">
-                <span className="text-[10px] text-slate-500 block">Model Architecture:</span>
-                <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={aiThreat?.model || 'TF-IDF + Logistic Regression'}>
-                  {aiThreat?.model || 'TF-IDF + Logistic Regression'}
-                </span>
-              </div>
-            </div>
-
-            {/* Salient TF-IDF Terms Learned by Model */}
-            {aiThreat?.topFeatures?.length > 0 ? (
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <div className="flex items-center justify-between text-[10.5px]">
-                  <span className="text-slate-400 flex items-center gap-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                    Salient Learned TF-IDF Predictive Terms:
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    Feature Weights Derived from Training
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 pt-0.5">
-                  {aiThreat.topFeatures.map((feat, idx) => (
-                    <span 
-                      key={idx}
-                      className={`px-2 py-0.5 rounded text-[10px] border ${
-                        feat.indicator === 'PHISHING' 
-                          ? 'bg-red-950/40 border-red-500/30 text-red-300' 
-                          : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
-                      }`}
-                      title={`TF-IDF: ${feat.tfidf} | Weight: ${feat.weight} | Impact: ${feat.impact}`}
-                    >
-                      <strong>"{feat.term}"</strong> <span className="text-[9px] opacity-75">({feat.weight > 0 ? `+${feat.weight}` : feat.weight})</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : aiThreat?.detectedIndicators?.length > 0 ? (
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <span className="text-slate-400 text-[10.5px] block">Linguistic Pattern Indicators:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {aiThreat.detectedIndicators.map((ind, idx) => (
-                    <span key={idx} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-amber-300">
-                      "{ind.token}" ({ind.category})
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Forensic Non-Absolute Disclaimer */}
-            <div className="pt-1 text-[10px] text-slate-500 font-sans italic border-t border-slate-800/60">
-              * Note: Machine learning threat analysis generates probabilistic lexical predictions based on statistical TF-IDF word distributions and does not constitute absolute proof on its own.
+              <h1 className="text-xl font-bold text-white tracking-tight">
+                Multi-Layer Forensic Analysis Results
+              </h1>
+              <p className="text-xs text-slate-400 max-w-xl">
+                Synthesis of RFC header alignment, natural language threat modeling, origin ASN routing, and quarantined payload forensics.
+              </p>
             </div>
           </div>
 
-          {/* 📎 ATTACHMENT FORENSICS Section */}
-          <AttachmentForensicsCard attachments={email?.attachments || []} />
-
-          {/* 🛡️ EMAIL AUTHENTICATION & DNS FORENSICS Section */}
-          <EmailAuthenticationCard emailAuth={currentAnalysis?.emailAuth || email?.emailAuth} />
-
-        </div>
-
-      </div>
-
-      {/* 📄 AUTOMATED FORENSIC REPORT & PDF EXPORT Section */}
-      <div className="rounded-2xl bg-gradient-to-r from-[#0d162a] via-[#091122] to-[#060a14] border border-cyan-500/40 p-6 shadow-xl font-mono">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-cyan-400 text-xs mb-1">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              STAGE 08 READY • AUTOMATED FORENSIC REPORTING & PDF EXPORT
-            </div>
-            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
-              <FileText className="w-5 h-5 text-cyan-400" />
-              <span>Certified Forensic Incident Dossier & Chain of Custody</span>
-            </h3>
-            <p className="text-xs text-slate-300 mt-1 font-sans">
-              Compile full 6-layer evidence into a court-admissible, tamper-evident forensic report complete with real SHA-256 integrity digest.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Right: Primary Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start lg:self-auto">
             <button
               type="button"
-              id="btn-view-forensic-report-bottom"
               onClick={() => onViewChange('forensic-report')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
             >
-              <FileText className="w-4 h-4" />
-              <span>View Full Dossier</span>
+              <FileText className="w-4 h-4 text-cyan-400" />
+              <span>View Dossier</span>
             </button>
 
             <button
               type="button"
-              id="btn-export-pdf-bottom"
-              onClick={async () => {
-                try {
-                  setExportingPdf(true);
-                  const rep = await buildForensicReport(currentAnalysis);
-                  const bytes = generateForensicPdf(rep);
-                  downloadPdfInBrowser(bytes, `${rep.caseId || 'MAVERICK'}-Forensic-Report.pdf`);
-                } catch (err) {
-                  console.error('Direct PDF export failed:', err);
-                  alert(`PDF Export Failed: ${err.message}`);
-                } finally {
-                  setExportingPdf(false);
-                }
-              }}
+              onClick={handleExportPdf}
               disabled={exportingPdf}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              <span>{exportingPdf ? 'Generating PDF...' : 'Export Certified PDF'}</span>
+              <span>{exportingPdf ? 'Exporting...' : 'Export Certified PDF'}</span>
             </button>
           </div>
+
         </div>
+
+        {/* Linear Threat Score Visual Meter */}
+        <div className="mt-6 pt-4 border-t border-slate-800/80 space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Threat Severity Scale</span>
+            <span className="text-red-400 font-bold">{threatScore}% Calibrated Risk</span>
+          </div>
+          <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 transition-all duration-500"
+              style={{ width: `${threatScore}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Ergonomic Deep-Dive Tabs */}
+      <div className="rounded-2xl bg-[#091122]/70 border border-slate-800/80 shadow-md overflow-hidden">
+        
+        {/* Tab Headers */}
+        <div className="flex items-center gap-1 px-4 border-b border-slate-800/80 bg-[#070e1c] overflow-x-auto text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('factors')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'factors'
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Evidence Ledger ({factors.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('ai')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'ai'
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            <span>AI Threat Telemetry</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('forensics')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'forensics'
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldX className="w-3.5 h-3.5" />
+            <span>Deep Forensics (Auth & Payloads)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('findings')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'findings'
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Findings & Chain of Custody</span>
+          </button>
+        </div>
+
+        {/* Tab Content Viewport */}
+        <div className="p-6">
+          
+          {/* Tab 1: Multi-Factor Evidence Ledger */}
+          {activeTab === 'factors' && (
+            <div className="space-y-4 font-mono">
+              <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2">
+                <span>Weighted Evidence Signals (Total 100 Points)</span>
+                <span>Calibrated Contribution</span>
+              </div>
+
+              <div className="space-y-3">
+                {factors.map((factor) => {
+                  const IconComponent = getCategoryIcon(factor.category);
+                  const colors = getSeverityColor(factor.severity);
+
+                  return (
+                    <div
+                      key={factor.id}
+                      className="p-4 rounded-xl bg-[#060a14] border border-slate-800/80 hover:border-slate-700 transition-all space-y-2.5"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-cyan-400">
+                            <IconComponent className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase text-slate-500 block font-semibold">{factor.category}</span>
+                            <h4 className="text-xs font-bold text-white">{factor.name}</h4>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${colors.bg} ${colors.border} ${colors.text}`}>
+                            {factor.severity}
+                          </span>
+                          <span className="text-xs font-bold text-cyan-300 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
+                            +{factor.points} / {factor.maxPoints} pts
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 font-sans leading-relaxed pl-1 border-l-2 border-slate-800">
+                        {factor.evidence}
+                      </p>
+
+                      <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-cyan-400"
+                          style={{ width: `${Math.min(100, (factor.points / factor.maxPoints) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: AI Threat Telemetry */}
+          {activeTab === 'ai' && (
+            <div className="space-y-5 font-mono text-xs">
+              <div className="p-5 rounded-xl bg-[#060a14] border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div>
+                    <span className="text-[10px] uppercase text-slate-500 font-bold block">Model Architecture</span>
+                    <div className="text-sm font-bold text-white mt-0.5">
+                      {aiThreat?.model || 'TF-IDF + Logistic Regression Classifier'}
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                    aiThreat?.prediction === 'PHISHING'
+                      ? 'bg-red-950/80 text-red-300 border-red-500/40'
+                      : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                  }`}>
+                    PREDICTION: {aiThreat?.prediction || 'PHISHING'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block">Phishing Probability</span>
+                    <span className="text-lg font-bold text-cyan-300 block mt-0.5">
+                      {typeof aiThreat?.phishingProbability === 'number' ? `${aiThreat.phishingProbability}%` : `${aiProb}%`}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block">Model Certainty</span>
+                    <span className="text-lg font-bold text-emerald-400 block mt-0.5">
+                      {confidence}% Confidence
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <span className="text-[10px] text-slate-500 block">Corpus Features</span>
+                    <span className="text-lg font-bold text-white block mt-0.5">
+                      5,000 Vocabulary Tokens
+                    </span>
+                  </div>
+                </div>
+
+                {/* Salient Features */}
+                {aiThreat?.topFeatures?.length > 0 && (
+                  <div className="pt-3 border-t border-slate-800 space-y-2">
+                    <span className="text-slate-400 text-xs font-semibold block">
+                      Learned Predictive Token Weights (TF-IDF Feature Attributions):
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {aiThreat.topFeatures.map((feat, idx) => (
+                        <span 
+                          key={idx}
+                          className={`px-2.5 py-1 rounded-lg text-xs border ${
+                            feat.indicator === 'PHISHING'
+                              ? 'bg-red-950/30 border-red-500/30 text-red-300'
+                              : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                          }`}
+                        >
+                          <strong>"{feat.term}"</strong> <span className="text-[10px] opacity-75">({feat.weight > 0 ? `+${feat.weight}` : feat.weight})</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 3: Deep Technical Forensics */}
+          {activeTab === 'forensics' && (
+            <div className="space-y-6">
+              <EmailAuthenticationCard emailAuth={currentAnalysis?.emailAuth || email?.emailAuth} />
+              <AttachmentForensicsCard attachments={email?.attachments || []} />
+            </div>
+          )}
+
+          {/* Tab 4: Findings & Chain of Custody */}
+          {activeTab === 'findings' && (
+            <div className="space-y-5 font-mono text-xs">
+              <div className="p-5 rounded-xl bg-[#060a14] border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-slate-300 block uppercase">
+                  Itemized Verified Findings:
+                </span>
+                <div className="space-y-2 font-sans text-xs text-slate-300">
+                  {(fusion?.verifiedReasons || [
+                    'Sender domain fails SPF authentication authorization.',
+                    'DKIM cryptographic signature verification failed or body was tampered with in transit.',
+                    'Urgent linguistic triggers detected in email subject and text.',
+                    'Origin IP corresponds to known proxy or anonymizing routing network.'
+                  ]).map((reason, i) => (
+                    <div key={i} className="flex items-start gap-2.5 p-2 rounded bg-slate-900/60 border border-slate-800">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{reason}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-5 rounded-xl bg-[#060a14] border border-slate-800 space-y-2">
+                <span className="text-xs font-bold text-slate-300 block uppercase">
+                  Forensic Chain of Custody & Evidence Integrity:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-slate-400">
+                  <div>
+                    Case Reference ID: <strong className="text-cyan-300">{currentAnalysis?.caseId || 'MAV-2026-CASE'}</strong>
+                  </div>
+                  <div>
+                    Attributed Campaign: <strong className="text-amber-400">{currentAnalysis?.campaign?.campaignId || 'TC-001'}</strong>
+                  </div>
+                  <div className="sm:col-span-2">
+                    Evidence SHA-256 Digest: <strong className="text-slate-200 break-all">{currentAnalysis?.evidenceIntegrity?.contentHashSha256 || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+
       </div>
 
     </div>

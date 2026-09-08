@@ -1,16 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
   MailWarning, 
   Timer, 
-  Terminal, 
-  Sparkles, 
   Zap, 
-  Radio, 
-  Flame, 
   ChevronRight,
-  TrendingUp,
+  Globe,
+  Radio,
+  ClipboardList,
+  Crosshair,
   Fingerprint
 } from 'lucide-react';
 import { StatCard } from '../components/dashboard/StatCard';
@@ -23,6 +22,8 @@ import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 import { SOC_SUMMARY } from '../data/mockSocData';
 
 export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCase, currentAnalysis }) => {
+  const [activeDeckTab, setActiveDeckTab] = useState('geo');
+
   const defaultNodes = [
     {
       ip: '185.220.101.45',
@@ -94,42 +95,39 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
     : (currentAnalysis?.geoInfo ? [currentAnalysis.geoInfo] : defaultNodes);
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-16 font-sans">
       
-      {/* Top SOC Status & Mission Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0b1426] via-[#091222] to-[#060a14] border border-cyan-500/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
-        <div className="absolute -right-12 -top-12 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -left-12 -bottom-12 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
+      {/* Modern, Breathable SOC Hero Banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0a1224] via-[#091120] to-[#070b14] border border-slate-800/80 p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                SOC COMMAND POSTURE: DEFCON 2
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium">
+                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>DEFCON 2 ACTIVE</span>
               </span>
-              <span className="text-xs font-mono text-slate-400">
-                AI Engine: <strong className="text-slate-200">Neural-v4.2-Hybrid</strong>
+              <span className="text-xs text-slate-400 font-mono">
+                ML Pipeline: <strong className="text-slate-200">TF-IDF + Neural-v4.2</strong>
               </span>
-              <span className="text-xs font-mono text-emerald-400">
-                • 0.03% False Positive
+              <span className="text-xs text-emerald-400 font-mono">
+                • 0.03% False Positive Rate
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
-              <span>MAVERICK Threat Intelligence & Forensics Hub</span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+              MAVERICK Threat Intelligence Hub
             </h1>
 
-            <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Autonomous, explainable deep-learning email perimeter defense. Inspects RFC headers, extracts IOCs, models multi-hop ASN infrastructure, and generates certifiable forensic dossiers for SIH 2026.
+            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
+              Autonomous deep-learning email perimeter defense. Inspects RFC headers, extracts IOCs, models multi-hop ASN infrastructure, and generates certifiable forensic dossiers.
             </p>
           </div>
 
-          {/* Quick CTA Actions */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {/* Action CTAs */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start lg:self-auto">
             <button
               onClick={onOpenScan}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-mono font-bold shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all active:scale-95"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer active:scale-95"
             >
               <Zap className="w-4 h-4 fill-current" />
               <span>Ingest & Scan Email</span>
@@ -137,37 +135,31 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
 
             <button
               onClick={() => onViewChange('threat-graph')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0e1a30] hover:bg-[#122342] border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold transition-all"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0d172e] hover:bg-[#122244] border border-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
               <Fingerprint className="w-4 h-4 text-cyan-400" />
-              <span>Explore Threat Graph</span>
+              <span>Threat Graph</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Real-time Sub-ticker */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-400">
-          <div className="flex items-center gap-4">
-            <span className="text-slate-300">
-              Active Threats Quarantined: <strong className="text-red-400">1,438</strong>
-            </span>
-            <span className="hidden sm:inline text-slate-700">|</span>
-            <span className="hidden sm:inline text-slate-300">
-              Avg Pipeline MTTD: <strong className="text-emerald-400">{SOC_SUMMARY.meanTimeToDetect}</strong>
-            </span>
-            <span className="hidden sm:inline text-slate-700">|</span>
-            <span className="hidden md:inline text-slate-300">
-              Zero-Day Quishing Vectors: <strong className="text-amber-400">{SOC_SUMMARY.zeroDayPhishingCampaigns} Campaigns</strong>
-            </span>
+        {/* Real-time Sub-metrics */}
+        <div className="mt-5 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-mono">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span>Quarantined Threats: <strong className="text-red-400">1,438</strong></span>
+            <span className="text-slate-700">|</span>
+            <span>Avg Pipeline MTTD: <strong className="text-emerald-400">{SOC_SUMMARY.meanTimeToDetect}</strong></span>
+            <span className="text-slate-700">|</span>
+            <span>Zero-Day Vectors: <strong className="text-amber-400">{SOC_SUMMARY.zeroDayPhishingCampaigns} Campaigns</strong></span>
           </div>
-          <div className="text-slate-500">
-            Signature DB: {SOC_SUMMARY.lastRuleUpdate}
+          <div className="text-slate-500 text-[11px]">
+            Rule DB: {SOC_SUMMARY.lastRuleUpdate}
           </div>
         </div>
       </div>
 
-      {/* 4 Stat Cards */}
+      {/* 4 Clean Stat KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           title="Total Scanned (24h)"
@@ -211,8 +203,8 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
         />
       </div>
 
-      {/* Threat Velocity Trend & Attack Vector Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Visual Analytics: Threat Velocity & Vector Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
           <ThreatVelocityChart />
         </div>
@@ -221,27 +213,100 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
         </div>
       </div>
 
-      {/* Forensic Geolocation Interactive Map Card */}
-      <ForensicGeoMap 
-        geoRecords={activeGeoRecords}
-        title="FORENSIC GEOLOCATION"
-        subtitle="Multi-Hop Network Egress & Phishing Infrastructure Topology"
-      />
+      {/* Operations Deck (Segmented Workspace Tabs for Map, Feeds, and Queues) */}
+      <div className="rounded-2xl bg-[#091122]/70 border border-slate-800/80 shadow-md overflow-hidden">
+        
+        {/* Operations Deck Tab Bar */}
+        <div className="flex items-center justify-between px-4 border-b border-slate-800/80 bg-[#070e1c] overflow-x-auto text-xs">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveDeckTab('geo')}
+              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'geo'
+                  ? 'border-cyan-400 text-cyan-300 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Global Egress Map</span>
+            </button>
 
-      {/* Live Threat Stream */}
-      <LiveThreatStream 
-        onInspectEmail={onInspectEmail}
-        onViewChange={onViewChange}
-      />
+            <button
+              type="button"
+              onClick={() => setActiveDeckTab('stream')}
+              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'stream'
+                  ? 'border-cyan-400 text-cyan-300 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 text-red-400" />
+              <span>Live Threat Stream</span>
+            </button>
 
-      {/* MITRE ATT&CK Matrix Correlation */}
-      <MitreMatrixSummary />
+            <button
+              type="button"
+              onClick={() => setActiveDeckTab('queue')}
+              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'queue'
+                  ? 'border-cyan-400 text-cyan-300 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Active Incident Queue</span>
+            </button>
 
-      {/* Active Incident Cases Queue */}
-      <IncidentQueueTable 
-        onViewChange={onViewChange}
-        onSelectCase={onSelectCase}
-      />
+            <button
+              type="button"
+              onClick={() => setActiveDeckTab('mitre')}
+              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'mitre'
+                  ? 'border-cyan-400 text-cyan-300 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5" />
+              <span>MITRE ATT&CK Matrix</span>
+            </button>
+          </div>
+
+          <span className="text-[11px] font-mono text-slate-500 hidden sm:inline">
+            SOC Operations Deck
+          </span>
+        </div>
+
+        {/* Tab Viewport */}
+        <div className="p-4 sm:p-5">
+          {activeDeckTab === 'geo' && (
+            <ForensicGeoMap 
+              geoRecords={activeGeoRecords}
+              title="FORENSIC GEOLOCATION"
+              subtitle="Multi-Hop Network Egress & Phishing Infrastructure Topology"
+            />
+          )}
+
+          {activeDeckTab === 'stream' && (
+            <LiveThreatStream 
+              onInspectEmail={onInspectEmail}
+              onViewChange={onViewChange}
+            />
+          )}
+
+          {activeDeckTab === 'queue' && (
+            <IncidentQueueTable 
+              onViewChange={onViewChange}
+              onSelectCase={onSelectCase}
+            />
+          )}
+
+          {activeDeckTab === 'mitre' && (
+            <MitreMatrixSummary />
+          )}
+        </div>
+
+      </div>
 
     </div>
   );

@@ -22,8 +22,9 @@ export function getApiBaseUrl() {
     // ignore localStorage errors
   }
 
-  // 2. Vite Environment Variable (configured in Vercel / .env)
-  const envUrl = import.meta.env?.VITE_API_URL;
+  // 2. Vite / Process Environment Variable (configured in Vercel / .env)
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
+                 (typeof process !== 'undefined' && process.env?.VITE_API_URL);
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
     return envUrl.trim().replace(/\/$/, '');
   }
