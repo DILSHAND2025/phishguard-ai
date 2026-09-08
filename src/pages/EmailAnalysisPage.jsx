@@ -50,6 +50,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
   const [pastedRawText, setPastedRawText] = useState('');
   const [copiedRaw, setCopiedRaw] = useState(false);
   
+  // Real File Upload State
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadedFileInfo, setUploadedFileInfo] = useState(null);
+
   // Pipeline Analysis State
   const [analysisState, setAnalysisState] = useState(currentAnalysis ? 'completed' : 'idle');
   const [activeStageIndex, setActiveStageIndex] = useState(-1);
@@ -76,6 +81,8 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
   // Load a synthetic scenario
   const handleLoadScenario = async (scenarioId) => {
     setSelectedScenarioId(scenarioId);
+    setUploadError(null);
+    setUploadedFileInfo(null);
     const scenario = SYNTHETIC_SCENARIOS.find(s => s.id === scenarioId) || SYNTHETIC_SCENARIOS[0];
     const parsed = await parseEmailContent(scenario.rawSnippet);
     
@@ -98,32 +105,77 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
-  // Handle actual file upload (.eml or .txt)
+  // Handle actual file upload (.eml, .msg, or .txt)
   const handleFileUpload = async (file) => {
     if (!file) return;
+    setUploadError(null);
+    setIsUploading(true);
+
     try {
+      if (file.size > 25 * 1024 * 1024) {
+        throw new Error('File exceeds maximum safe inspection limit (25 MB).');
+      }
+
       const reader = new FileReader();
+
+      reader.onerror = () => {
+        setIsUploading(false);
+        setUploadError(`Failed to read file "${file.name}". Permission denied or file unreadable.`);
+      };
+
       reader.onload = async (event) => {
-        const text = event.target?.result;
-        if (typeof text === 'string') {
+        try {
+          const text = event.target?.result;
+          if (!text || typeof text !== 'string' || !text.trim()) {
+            throw new Error(`File "${file.name}" appears to be empty (0 bytes).`);
+          }
+
+          // Check if binary Outlook .msg format
+          if (text.charCodeAt(0) === 0xD0 && text.charCodeAt(1) === 0xCF) {
+            throw new Error('Binary Outlook .msg format detected. Please export or save the message as an RFC 822 standard .eml file to inspect.');
+          }
+
           const parsed = await parseEmailContent(text, { name: file.name, size: file.size });
           parsed.scenarioName = `Uploaded: ${file.name}`;
           parsed.tag = 'REAL INGESTED FILE';
+
           setEmailData(parsed);
+          setUploadedFileInfo({
+            name: file.name,
+            size: (file.size / 1024).toFixed(1) + ' KB',
+            subject: parsed.subject || '(No Subject)',
+            sender: parsed.fromParsed?.address || parsed.sender,
+            attachmentsCount: parsed.attachments?.length || 0
+          });
+          setSelectedScenarioId('');
           setAnalysisState('idle');
           setActiveStageIndex(-1);
           setStageStatuses(PIPELINE_STAGES.map(() => 'pending'));
+          setIsUploading(false);
+
+          // Scroll to the telemetry container
+          setTimeout(() => {
+            document.getElementById('email-telemetry-container')?.scrollIntoView({ behavior: 'smooth' });
+          }, 150);
+        } catch (err) {
+          console.error('Error parsing email file:', err);
+          setUploadError(`Failed to parse "${file.name}": ${err.message || 'Malformed email format.'}`);
+          setIsUploading(false);
         }
       };
+
       reader.readAsText(file);
     } catch (err) {
-      console.error('Error reading email file:', err);
+      console.error('Error in handleFileUpload:', err);
+      setUploadError(err.message || 'An unexpected error occurred while processing the file.');
+      setIsUploading(false);
     }
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file);
+    e.target.value = '';
   };
 
   const handleDragOver = (e) => {
@@ -240,7 +292,8 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
         type="file" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
-        accept=".eml,.msg,.txt" 
+        onClick={(e) => { e.target.value = ''; }}
+        accept=".eml,.msg,.txt,.EML,.MSG,.TXT,message/rfc822,text/plain,text/*,*/*" 
         className="hidden" 
       />
 
@@ -339,6 +392,73 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           </span>
         </div>
 
+        {/* Dynamic Ingestion Notifications */}
+        {isUploading && (
+          <div className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex items-center justify-center gap-3 text-cyan-300 font-mono text-xs animate-pulse">
+            <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
+            <span>Reading & Ingesting RFC 822 / MIME payload...</span>
+          </div>
+        )}
+
+        {uploadError && (
+          <div className="p-4 rounded-xl bg-red-950/60 border border-red-500/50 flex items-start justify-between gap-3 text-red-200 font-mono text-xs animate-fadeIn">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-red-300">File Ingestion Alert:</strong> {uploadError}
+                <div className="text-[11px] text-red-400/80 mt-1">
+                  Ensure the file is an RFC 822 email (.eml) or use "Paste Raw RFC Headers" to test raw text directly.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              className="text-red-400 hover:text-white p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {uploadedFileInfo && !uploadError && (
+          <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-fadeIn">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-900/50 border border-emerald-500/40 text-emerald-400">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-sm">
+                    {uploadedFileInfo.name}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-900/80 text-emerald-300 text-[10px] font-bold">
+                    {uploadedFileInfo.size}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 text-[10px]">
+                    READY FOR ANALYSIS
+                  </span>
+                </div>
+                <div className="text-slate-300 text-[11px] line-clamp-1">
+                  <strong className="text-slate-400">Subject:</strong> {uploadedFileInfo.subject}
+                </div>
+                <div className="text-cyan-300 text-[11px] line-clamp-1">
+                  <strong className="text-slate-400">From:</strong> {uploadedFileInfo.sender}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={startAnalysis}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all shrink-0 cursor-pointer active:scale-95"
+            >
+              <Zap className="w-4 h-4 fill-current" />
+              <span>Run 8-Stage Threat Analysis</span>
+            </button>
+          </div>
+        )}
+
         {/* Drag and drop area */}
         <div
           onDragOver={handleDragOver}
@@ -347,8 +467,10 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           onClick={handleBrowseClick}
           className={`rounded-xl border-2 border-dashed p-6 text-center transition-all duration-200 cursor-pointer ${
             isDragActive
-              ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
-              : 'border-slate-800 hover:border-cyan-500/40 bg-[#060a14]/60'
+              ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_25px_rgba(6,182,212,0.3)] scale-[0.99]'
+              : uploadedFileInfo
+                ? 'border-emerald-500/40 bg-emerald-950/10'
+                : 'border-slate-800 hover:border-cyan-500/40 bg-[#060a14]/60'
           }`}
         >
           <div className="flex flex-col items-center justify-center space-y-2">

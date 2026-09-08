@@ -279,28 +279,42 @@ export function inspectAttachmentSafety(filename, sizeBytes = 0) {
   };
 }
 
+// Escape special regex characters in a string
+export function escapeRegex(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Master parsing function for .eml, raw headers, or full RFC 822 string
 export async function parseEmailContent(rawInput, fileMetadata = null) {
   if (!rawInput || typeof rawInput !== 'string') {
     throw new Error('Invalid input: Expected non-empty string email payload');
   }
 
+  // Strip UTF-8 BOM if present (common in Windows exported files)
+  let cleanInput = rawInput.charCodeAt(0) === 0xFEFF ? rawInput.slice(1) : rawInput;
+
+  // Strip Unix mbox delimiter if present (e.g. "From MAILER-DAEMON ...")
+  if (cleanInput.startsWith('From ')) {
+    cleanInput = cleanInput.replace(/^From [^\r\n]*\r?\n/, '');
+  }
+
   // Separate header block from body block (split at first double CRLF or LF)
-  const headerEndPos = rawInput.search(/\r?\n\r?\n/);
+  const headerEndPos = cleanInput.search(/\r?\n\r?\n/);
   let headerText = '';
   let bodyText = '';
 
   if (headerEndPos !== -1) {
-    headerText = rawInput.substring(0, headerEndPos);
-    bodyText = rawInput.substring(headerEndPos).replace(/^\r?\n\r?\n/, '');
+    headerText = cleanInput.substring(0, headerEndPos);
+    bodyText = cleanInput.substring(headerEndPos).replace(/^\r?\n\r?\n/, '');
   } else {
     // If no clear body separator, treat entire text as headers if it contains colons
-    if (rawInput.includes(':')) {
-      headerText = rawInput;
+    if (cleanInput.includes(':')) {
+      headerText = cleanInput;
       bodyText = '';
     } else {
       headerText = '';
-      bodyText = rawInput;
+      bodyText = cleanInput;
     }
   }
 
@@ -344,7 +358,7 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
   }
   // Fallback to any public IP found in Received or headers
   if (!originatingIP) {
-    const allPublicIPs = extractIPv4(rawInput).filter(ip => !isPrivateIP(ip));
+    const allPublicIPs = extractIPv4(cleanInput).filter(ip => !isPrivateIP(ip));
     if (allPublicIPs.length > 0) originatingIP = allPublicIPs[0];
   }
 
@@ -401,64 +415,80 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
   let parsedMimeParts = false;
 
   if (boundaryMatch) {
-    const boundary = boundaryMatch[1];
-    const rawParts = rawInput.split(new RegExp(`--${boundary}(?:--)?`));
-    for (let pIdx = 0; pIdx < rawParts.length; pIdx++) {
-      const part = rawParts[pIdx];
-      const partHeaderEnd = part.search(/\r?\n\r?\n/);
-      if (partHeaderEnd === -1) continue;
+    const boundary = boundaryMatch[1].trim();
+    try {
+      const rawParts = cleanInput.split(new RegExp(`--${escapeRegex(boundary)}(?:--)?`));
+      for (let pIdx = 0; pIdx < rawParts.length; pIdx++) {
+        const part = rawParts[pIdx];
+        const partHeaderEnd = part.search(/\r?\n\r?\n/);
+        if (partHeaderEnd === -1) continue;
 
-      const partHeaderText = part.substring(0, partHeaderEnd);
-      const partBody = part.substring(partHeaderEnd).replace(/^\r?\n\r?\n/, '').trim();
+        const partHeaderText = part.substring(0, partHeaderEnd);
+        const partBody = part.substring(partHeaderEnd).replace(/^\r?\n\r?\n/, '').trim();
 
-      const filenameMatch = partHeaderText.match(/filename="?([^"\r\n]+)"?/i) || partHeaderText.match(/name="?([^"\r\n]+)"?/i);
-      const isAttachmentDisp = /Content-Disposition:\s*attachment/i.test(partHeaderText);
+        const filenameMatch = partHeaderText.match(/filename="?([^"\r\n]+)"?/i) || partHeaderText.match(/name="?([^"\r\n]+)"?/i);
+        const isAttachmentDisp = /Content-Disposition:\s*attachment/i.test(partHeaderText);
 
-      if (filenameMatch || (isAttachmentDisp && filenameMatch)) {
-        parsedMimeParts = true;
-        const filename = filenameMatch[1];
-        const mimeMatch = partHeaderText.match(/Content-Type:\s*([^;\r\n]+)/i);
-        const declaredMime = mimeMatch ? mimeMatch[1].trim() : 'application/octet-stream';
-        
-        // Pass base64 content if present, or null
-        const isBase64 = /Content-Transfer-Encoding:\s*base64/i.test(partHeaderText);
-        const contentPayload = isBase64 ? partBody : (partBody.length > 0 ? partBody : null);
+        if (filenameMatch || (isAttachmentDisp && filenameMatch)) {
+          parsedMimeParts = true;
+          const filename = filenameMatch[1];
+          const mimeMatch = partHeaderText.match(/Content-Type:\s*([^;\r\n]+)/i);
+          const declaredMime = mimeMatch ? mimeMatch[1].trim() : 'application/octet-stream';
+          
+          // Pass base64 content if present, or null
+          const isBase64 = /Content-Transfer-Encoding:\s*base64/i.test(partHeaderText);
+          const contentPayload = isBase64 ? partBody : (partBody.length > 0 ? partBody : null);
 
-        const forensicRecord = await analyzeAttachment({
-          filename,
-          content: contentPayload,
-          mimeType: declaredMime,
-          index: attachments.length
-        });
-        attachments.push(forensicRecord);
+          try {
+            const forensicRecord = await analyzeAttachment({
+              filename,
+              content: contentPayload,
+              mimeType: declaredMime,
+              index: attachments.length
+            });
+            attachments.push(forensicRecord);
+          } catch (attErr) {
+            console.warn('Failed to analyze attachment:', attErr);
+          }
+        }
       }
+    } catch (bErr) {
+      console.warn('Boundary parsing error:', bErr);
     }
   }
 
   // Fallback: regex search if MIME boundary split did not find attachments
   if (!parsedMimeParts) {
-    const attachmentMatches = rawInput.matchAll(/Content-Disposition:\s*attachment;[^]*?filename="?([^"\r\n]+)"?/gi);
+    const attachmentMatches = cleanInput.matchAll(/Content-Disposition:\s*attachment;[^]*?filename="?([^"\r\n]+)"?/gi);
     for (const match of attachmentMatches) {
       const filename = match[1];
-      const forensicRecord = await analyzeAttachment({
-        filename,
-        content: null,
-        mimeType: 'application/octet-stream',
-        index: attachments.length
-      });
-      attachments.push(forensicRecord);
+      try {
+        const forensicRecord = await analyzeAttachment({
+          filename,
+          content: null,
+          mimeType: 'application/octet-stream',
+          index: attachments.length
+        });
+        attachments.push(forensicRecord);
+      } catch (attErr) {
+        console.warn('Failed to analyze fallback attachment:', attErr);
+      }
     }
   }
 
-  // If user provided a fileMetadata attachment or manual attachment
-  if (fileMetadata && fileMetadata.name && attachments.length === 0 && fileMetadata.name.endsWith('.eml') === false) {
-    const forensicRecord = await analyzeAttachment({
-      filename: fileMetadata.name,
-      content: fileMetadata.content || null,
-      mimeType: fileMetadata.type || 'application/octet-stream',
-      index: 0
-    });
-    attachments.push(forensicRecord);
+  // If user provided a fileMetadata attachment or manual attachment (and not the .eml file itself)
+  if (fileMetadata && fileMetadata.name && attachments.length === 0 && !fileMetadata.name.toLowerCase().endsWith('.eml')) {
+    try {
+      const forensicRecord = await analyzeAttachment({
+        filename: fileMetadata.name,
+        content: fileMetadata.content || null,
+        mimeType: fileMetadata.type || 'application/octet-stream',
+        index: 0
+      });
+      attachments.push(forensicRecord);
+    } catch (attErr) {
+      console.warn('Failed to analyze metadata attachment:', attErr);
+    }
   }
 
   // Sanitize body snippet for display
@@ -492,7 +522,7 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
     headers,
     rawHeaders: headerText,
     body: cleanBody,
-    rawSnippet: rawInput.substring(0, 3500),
+    rawSnippet: cleanInput.substring(0, 3500),
     auth: {
       spf: { result: spfResult, details: spfDetails },
       dkim: { result: dkimResult, details: dkimDetails },
