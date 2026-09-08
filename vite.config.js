@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  base: '/maverick/',
+  base: process.env.BASE_PATH || (process.env.GITHUB_ACTIONS ? '/maverick/' : '/'),
   server: {
     proxy: {
       '/api': {

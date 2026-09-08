@@ -32,52 +32,86 @@ import { SYNTHETIC_SCENARIOS } from './data/syntheticScenarios';
 
 import './App.css';
 
-// Route path to internal view identifier mapping
-const PATH_TO_VIEW = {
-  '/maverick/': 'dashboard',
-  '/maverick': 'dashboard',
-  '/maverick/dashboard': 'dashboard',
-  '/maverick/email-analysis': 'email-analysis',
-  '/maverick/analysis-results': 'analysis-results',
-  '/maverick/ioc-intel': 'ioc-intel',
-  '/maverick/threat-graph': 'threat-graph',
-  '/maverick/geo-asn': 'geo-asn',
-  '/maverick/cases': 'investigation-case',
-  '/maverick/investigation-case': 'investigation-case',
-  '/maverick/reports': 'forensic-report',
-  '/maverick/forensic-report': 'forensic-report',
-  '/maverick/settings': 'settings'
+// Dynamic Base Detection for Vercel (root '/'), GitHub Pages ('/maverick/'), or custom domains
+const RAW_BASE = import.meta.env.BASE_URL || '/';
+const BASE_PREFIX = RAW_BASE.replace(/\/$/, ''); // '' for root domain (Vercel), '/maverick' for subpath
+
+// Canonical mapping of views to relative sub-paths
+const VIEW_TO_REL_PATH = {
+  'dashboard': '/dashboard',
+  'email-analysis': '/email-analysis',
+  'analysis-results': '/analysis-results',
+  'ioc-intel': '/ioc-intel',
+  'threat-graph': '/threat-graph',
+  'geo-asn': '/geo-asn',
+  'investigation-case': '/cases',
+  'forensic-report': '/reports',
+  'settings': '/settings'
 };
 
-const VIEW_TO_PATH = {
-  'dashboard': '/maverick/dashboard',
-  'email-analysis': '/maverick/email-analysis',
-  'analysis-results': '/maverick/analysis-results',
-  'ioc-intel': '/maverick/ioc-intel',
-  'threat-graph': '/maverick/threat-graph',
-  'geo-asn': '/maverick/geo-asn',
-  'investigation-case': '/maverick/cases',
-  'forensic-report': '/maverick/reports',
-  'settings': '/maverick/settings'
+const REL_PATH_TO_VIEW = {
+  '': 'dashboard',
+  '/': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/email-analysis': 'email-analysis',
+  '/analysis-results': 'analysis-results',
+  '/ioc-intel': 'ioc-intel',
+  '/threat-graph': 'threat-graph',
+  '/geo-asn': 'geo-asn',
+  '/cases': 'investigation-case',
+  '/investigation-case': 'investigation-case',
+  '/reports': 'forensic-report',
+  '/forensic-report': 'forensic-report',
+  '/settings': 'settings'
 };
+
+function getUrlForView(viewId) {
+  const rel = VIEW_TO_REL_PATH[viewId] || '/dashboard';
+  return `${BASE_PREFIX}${rel}`;
+}
+
+function getRootUrl() {
+  return BASE_PREFIX ? `${BASE_PREFIX}/` : '/';
+}
+
+function getViewFromCurrentLocation() {
+  let pathname = window.location.pathname.replace(/\/$/, '');
+
+  // Strip BASE_PREFIX if configured and present
+  if (BASE_PREFIX && pathname.startsWith(BASE_PREFIX)) {
+    pathname = pathname.slice(BASE_PREFIX.length);
+  }
+
+  // Tolerate '/maverick' prefix even if deployed to root (e.g. legacy bookmark or redirect)
+  if (pathname.startsWith('/maverick')) {
+    pathname = pathname.slice('/maverick'.length);
+  }
+
+  if (!pathname || pathname === '') pathname = '/';
+  return REL_PATH_TO_VIEW[pathname] || 'dashboard';
+}
 
 function getInitialView(user) {
-  const path = window.location.pathname.replace(/\/$/, '') || '/maverick';
+  const targetView = getViewFromCurrentLocation();
+  const root = getRootUrl();
+  const currentClean = window.location.pathname.replace(/\/$/, '') || '/';
+  const rootClean = root.replace(/\/$/, '') || '/';
+
   if (!user) {
-    // Unauthenticated: if user tries to directly access any internal route, redirect to /maverick/
-    if (path !== '/maverick') {
-      window.history.replaceState(null, '', '/maverick/');
+    // Unauthenticated: if user tries to directly access any internal route, redirect to root
+    if (currentClean !== rootClean) {
+      window.history.replaceState(null, '', root);
     }
     return 'dashboard';
   }
 
-  // Authenticated: if user is at root /maverick, redirect to /maverick/dashboard
-  if (path === '/maverick') {
-    window.history.replaceState(null, '', '/maverick/dashboard');
+  // Authenticated: if user is at root, redirect to dashboard URL
+  if (currentClean === rootClean) {
+    window.history.replaceState(null, '', getUrlForView('dashboard'));
     return 'dashboard';
   }
 
-  return PATH_TO_VIEW[path] || PATH_TO_VIEW[path + '/'] || 'dashboard';
+  return targetView;
 }
 
 function App() {
@@ -102,16 +136,11 @@ function App() {
       const activeUser = getCurrentUser();
       if (!activeUser) {
         setCurrentUser(null);
-        window.history.replaceState(null, '', '/maverick/');
+        window.history.replaceState(null, '', getRootUrl());
       } else {
         setCurrentUser(activeUser);
-        const path = window.location.pathname.replace(/\/$/, '') || '/maverick';
-        if (path === '/maverick') {
-          window.history.replaceState(null, '', '/maverick/dashboard');
-          setCurrentView('dashboard');
-        } else {
-          setCurrentView(PATH_TO_VIEW[path] || 'dashboard');
-        }
+        const view = getViewFromCurrentLocation();
+        setCurrentView(view);
       }
     };
 
@@ -124,20 +153,19 @@ function App() {
     const activeUser = getCurrentUser();
     if (!activeUser) {
       setCurrentUser(null);
-      window.history.replaceState(null, '', '/maverick/');
+      window.history.replaceState(null, '', getRootUrl());
       return;
     }
 
     setCurrentView(viewId);
-    const targetPath = VIEW_TO_PATH[viewId] || '/maverick/dashboard';
-    window.history.pushState(null, '', targetPath);
+    window.history.pushState(null, '', getUrlForView(viewId));
   }, []);
 
   // Authentication callback: called on successful Google OAuth
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
     setCurrentView('dashboard');
-    window.history.pushState(null, '', '/maverick/dashboard');
+    window.history.pushState(null, '', getUrlForView('dashboard'));
   };
 
   // Sign out callback: clears session and returns to login screen
@@ -145,7 +173,7 @@ function App() {
     logout();
     setCurrentUser(null);
     setCurrentView('dashboard');
-    window.history.replaceState(null, '', '/maverick/');
+    window.history.replaceState(null, '', getRootUrl());
   };
 
   // Master end-to-end forensic analysis pipeline
