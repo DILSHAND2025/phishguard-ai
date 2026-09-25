@@ -15,11 +15,21 @@
 import http from 'node:http';
 import https from 'node:https';
 import url from 'node:url';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { analyzeAttachment } from '../src/services/attachmentForensics.js';
 import { analyzeEmailAuthentication } from '../src/services/emailAuthService.js';
 import { buildForensicReport } from '../src/services/forensicReportService.js';
 import { generateForensicPdf, computePdfFileHash } from '../src/services/pdfBuilder.js';
 import { isPrivateOrReservedIP } from '../src/services/emailParser.js';
+import { OAuth2Client } from 'google-auth-library';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 export { isPrivateOrReservedIP };
 
@@ -27,6 +37,9 @@ const PORT = process.env.PORT || 5000;
 const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
 const ABUSE_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
 const PYTHON_CMD = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
+
+const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const CACHE = new Map();
 
@@ -100,6 +113,52 @@ const server = http.createServer(async (req, res) => {
         'POST /api/forensic-report/pdf'
       ]
     });
+  }
+
+  // Google OAuth verification endpoint: POST /api/auth/google
+  if (pathname === '/api/auth/google' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const credential = parsed.credential;
+        if (!credential) {
+          console.error('[MAVERICK Auth] Missing credential parameter in request');
+          return sendJson(res, 400, { success: false, error: 'Missing credential parameter' });
+        }
+        if (!GOOGLE_CLIENT_ID) {
+          console.error('[MAVERICK Auth] Google Client ID not configured on server');
+          return sendJson(res, 500, { success: false, error: 'Google Client ID not configured on server' });
+        }
+        
+        try {
+          const ticket = await oauth2Client.verifyIdToken({
+            idToken: credential,
+            audience: GOOGLE_CLIENT_ID,
+          });
+          
+          const payload = ticket.getPayload();
+          
+          return sendJson(res, 200, {
+            success: true,
+            id: payload.sub,
+            name: payload.name,
+            email: payload.email,
+            picture: payload.picture,
+            authMethod: 'google-oauth2-backend',
+            expiresAt: payload.exp ? payload.exp * 1000 : undefined
+          });
+        } catch (verifyErr) {
+          console.error('[MAVERICK Auth] Token verification failed:', verifyErr.message);
+          return sendJson(res, 401, { success: false, error: 'Invalid ID token', details: verifyErr.message });
+        }
+      } catch (err) {
+        console.error('[MAVERICK Auth] Unexpected auth endpoint error:', err.message);
+        return sendJson(res, 500, { success: false, error: 'Internal server error during authentication' });
+      }
+    });
+    return;
   }
 
   // ML Prediction Endpoint: POST /predict or /api/ml/predict

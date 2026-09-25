@@ -107,21 +107,27 @@ export function initGoogleIdentityServices({ onCredentialResponse, onError }) {
   try {
     window.google.accounts.id.initialize({
       client_id: clientId,
-      callback: (response) => {
+      callback: async (response) => {
         if (response.credential) {
-          const payload = decodeJwtPayload(response.credential);
-          if (payload) {
-            const user = storeUserSession({
-              id: payload.sub,
-              name: payload.name,
-              email: payload.email,
-              picture: payload.picture,
-              authMethod: 'google-oauth-oidc',
-              expiresAt: payload.exp ? payload.exp * 1000 : undefined
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || '';
+            const res = await fetch(`${apiUrl}/api/auth/google`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ credential: response.credential })
             });
+            
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || 'Backend verification failed');
+            }
+            
+            const userData = await res.json();
+            const user = storeUserSession(userData);
             onCredentialResponse?.(user);
-          } else {
-            onError?.('Failed to decode Google ID token.');
+          } catch (err) {
+            console.error('Backend token verification error:', err);
+            onError?.(err.message || 'Failed to verify token on server.');
           }
         } else {
           onError?.('No credential returned from Google OAuth.');
@@ -138,3 +144,4 @@ export function initGoogleIdentityServices({ onCredentialResponse, onError }) {
     return false;
   }
 }
+

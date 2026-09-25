@@ -72,44 +72,8 @@ export const LoginPage = ({ onLoginSuccess }) => {
       try {
         window.google.accounts.id.prompt((notification) => {
           if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            if (window.google.accounts.oauth2) {
-              const client = window.google.accounts.oauth2.initTokenClient({
-                client_id: clientId,
-                scope: 'openid profile email',
-                callback: async (tokenResponse) => {
-                  if (tokenResponse.access_token) {
-                    try {
-                      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                        headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-                      });
-                      const info = await res.json();
-                      const user = storeUserSession({
-                        id: info.sub,
-                        name: info.name || 'Authorized Investigator',
-                        email: info.email || 'investigator@gov-organization.in',
-                        picture: info.picture || '',
-                        authMethod: 'google-oauth2-token'
-                      });
-                      setIsLoading(false);
-                      onLoginSuccess?.(user);
-                    } catch {
-                      setIsLoading(false);
-                      setErrorMsg('Failed to retrieve user profile from Google API.');
-                    }
-                  } else {
-                    setIsLoading(false);
-                    setErrorMsg('Google authentication was not completed.');
-                  }
-                },
-                error_callback: (error) => {
-                  setIsLoading(false);
-                  setErrorMsg(error.message || 'Google OAuth error occurred.');
-                }
-              });
-              client.requestAccessToken();
-            } else {
-              setIsLoading(false);
-            }
+            setIsLoading(false);
+            setErrorMsg('Google login prompt blocked or skipped. Please use the Google Sign-in button above.');
           }
         });
       } catch {

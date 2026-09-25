@@ -58,8 +58,38 @@ export const ForensicGeoMap = ({
   const markersLayerRef = useRef(null);
   const [selectedIP, setSelectedIP] = useState(null);
 
+  const [clientGeo, setClientGeo] = useState(null);
+
+  useEffect(() => {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.latitude && data.longitude) {
+          setClientGeo({
+            ip: data.ip,
+            role: 'CURRENT_USER',
+            city: data.city,
+            country: data.country_name,
+            countryCode: data.country_code,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            asn: data.asn,
+            isp: data.org,
+            isDemo: false,
+            dataSource: 'ipapi.co LIVE'
+          });
+        }
+      })
+      .catch(err => console.error("Failed to fetch client geo:", err));
+  }, []);
+
+  const displayRecords = [...(Array.isArray(geoRecords) ? geoRecords : []).filter(r => !r.isDemo)];
+  if (clientGeo && !displayRecords.some(r => r.ip === clientGeo.ip)) {
+    displayRecords.push(clientGeo);
+  }
+
   // Filter records that have valid numeric coordinates
-  const geolocatedPoints = (Array.isArray(geoRecords) ? geoRecords : []).filter(
+  const geolocatedPoints = displayRecords.filter(
     r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude)
   );
 
@@ -78,10 +108,9 @@ export const ForensicGeoMap = ({
         scrollWheelZoom: false
       });
 
-      // CartoDB Dark Matter tiles (dark SOC aesthetic)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
+      // Standard Free OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19
       }).addTo(map);
 
@@ -194,7 +223,7 @@ export const ForensicGeoMap = ({
     }
   };
 
-  const activeRecord = geoRecords.find(r => r.ip === selectedIP) || geolocatedPoints[0] || geoRecords[0] || null;
+  const activeRecord = displayRecords.find(r => r.ip === selectedIP) || geolocatedPoints[0] || displayRecords[0] || null;
 
   return (
     <div className={`rounded-xl bg-[#09101e] border border-cyan-500/40 p-5 shadow-[0_0_25px_rgba(6,182,212,0.12)] font-mono text-xs space-y-4 ${className}`}>
@@ -277,18 +306,18 @@ export const ForensicGeoMap = ({
                 Network Indicators Ledger
               </span>
               <span className="text-[10px] text-slate-500">
-                {geoRecords.length} Indicator{geoRecords.length === 1 ? '' : 's'}
+                {displayRecords.length} Indicator{displayRecords.length === 1 ? '' : 's'}
               </span>
             </div>
 
             {/* Scrollable Indicator List */}
             <div className="space-y-2 overflow-y-auto max-h-[300px] pr-1">
-              {geoRecords.length === 0 ? (
+              {displayRecords.length === 0 ? (
                 <div className="p-4 text-center text-slate-500 text-[11px]">
                   No network IP indicators extracted.
                 </div>
               ) : (
-                geoRecords.map((rec, idx) => {
+                displayRecords.map((rec, idx) => {
                   const isSelected = rec.ip === selectedIP;
                   const hasCoords = typeof rec.latitude === 'number' && typeof rec.longitude === 'number';
 
