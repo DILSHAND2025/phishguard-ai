@@ -125,7 +125,7 @@ export const ForensicReport = ({ analysisResult, onViewChange }) => {
               <span>Cybersecurity Incident Dossier: {report.caseId}</span>
             </h1>
             <p className="text-xs text-slate-300 mt-1 font-mono">
-              Certified Multi-Layer Forensic Evidence with Cryptographic Chain of Custody (ISO/IEC 27037:2012)
+              Tamper-evident forensic report with SHA-256 integrity verification to support evidence preservation and investigation.
             </p>
           </div>
 

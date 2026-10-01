@@ -1,180 +1,261 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
-  MailSearch, 
-  ShieldAlert, 
-  Binary, 
-  Globe2, 
-  GitFork, 
+  ShieldCheck, 
   Briefcase, 
-  FileText,
-  ChevronRight,
-  ShieldCheck,
-  Server,
-  Zap,
-  Flame,
-  Settings,
-  LogOut
+  FileText, 
+  Settings, 
+  User, 
+  LogOut, 
+  Shield, 
+  Mail, 
+  X 
 } from 'lucide-react';
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, step: '01', badge: 'LIVE', badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
-  { id: 'email-analysis', label: 'Email Analysis', icon: MailSearch, step: '02', badge: 'INPUT', badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
-  { id: 'analysis-results', label: 'Analysis Results', icon: ShieldAlert, step: '03', badge: 'AI SCORE', badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40' },
-  { id: 'ioc-intel', label: 'IOC Intelligence', icon: Binary, step: '04', badge: 'IOCs', badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
-  { id: 'geo-asn', label: 'GeoLocation & ASN', icon: Globe2, step: '05', badge: 'GLOBAL', badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
-  { id: 'threat-graph', label: 'Threat Graph', icon: GitFork, step: '06', badge: 'GRAPH', badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
-  { id: 'investigation-case', label: 'Investigation Case', icon: Briefcase, step: '07', badge: 'WAR ROOM', badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
-  { id: 'forensic-report', label: 'Forensic Report', icon: FileText, step: '08', badge: 'SIH CERT', badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
-  { id: 'settings', label: 'Settings', icon: Settings, step: '⚙️', badge: 'CONFIG', badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40' },
-];
+export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
-export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout }) => {
+  const mainNav = [
+    { 
+      id: 'dashboard', 
+      label: 'Dashboard', 
+      icon: LayoutDashboard,
+      isActive: currentView === 'dashboard'
+    },
+    { 
+      id: 'security-analyzer', 
+      label: 'Security Analyzer', 
+      icon: ShieldCheck,
+      isActive: currentView === 'security-analyzer' || currentView === 'analysis-results'
+    },
+    { 
+      id: 'investigation-case', 
+      label: 'Cases', 
+      icon: Briefcase,
+      isActive: currentView === 'investigation-case' || currentView === 'cases'
+    },
+    { 
+      id: 'forensic-report', 
+      label: 'Reports', 
+      icon: FileText,
+      isActive: currentView === 'forensic-report' || currentView === 'reports'
+    },
+  ];
+
+  const handleNavClick = (viewId) => {
+    onViewChange(viewId);
+    if (onCloseMobile) onCloseMobile();
+  };
+
   return (
-    <aside className="w-64 shrink-0 flex flex-col justify-between border-r border-cyan-950/50 bg-[#060a12] min-h-[calc(100vh-4rem)]">
-      
-      {/* Top Section: Navigation Links */}
-      <div className="p-3 space-y-4">
-        
-        {/* Pipeline Heading */}
-        <div className="px-3 pt-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider font-mono font-bold text-slate-400">
-              FORENSIC PIPELINE
-            </span>
-            <span className="flex items-center gap-1 text-[10px] font-mono text-cyan-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-              8 STAGES
-            </span>
-          </div>
-          <div className="h-0.5 w-full bg-gradient-to-r from-cyan-500/40 via-blue-500/20 to-transparent mt-1.5"></div>
-        </div>
-
-        {/* Nav List */}
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onViewChange(item.id)}
-                className={`w-full group flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all text-left ${
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-950/80 to-[#0e1b2f] text-cyan-200 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#0c1424] border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`font-mono text-[10px] px-1 rounded ${isActive ? 'bg-cyan-500/30 text-cyan-300 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>
-                    {item.step}
-                  </span>
-                  <Icon className={`w-4 h-4 shrink-0 transition-transform ${isActive ? 'text-cyan-400 scale-110' : 'text-slate-500 group-hover:text-cyan-300'}`} />
-                  <span className="truncate tracking-wide">{item.label}</span>
-                </div>
-
-                {item.badge && (
-                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${item.badgeColor}`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Active Campaign Alert Box */}
-        <div className="p-3 rounded-lg bg-gradient-to-b from-red-950/30 to-[#0d1525] border border-red-500/30">
-          <div className="flex items-center gap-2 text-red-400 text-xs font-semibold mb-1">
-            <Flame className="w-3.5 h-3.5 text-red-400 animate-bounce" />
-            <span>Active Phish Campaign</span>
-          </div>
-          <p className="text-[11px] text-slate-300 leading-snug">
-            UNC4219 impersonating Gov Treasury portal via QR polyglots.
-          </p>
-          <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-red-300/80">
-            <span>High Risk: 98/100</span>
+    <>
+      <aside 
+        className={`w-[230px] shrink-0 flex flex-col justify-between border-r border-slate-800/80 bg-[#090d16] text-slate-300 transition-all duration-200 z-30
+          ${isMobileOpen ? 'fixed inset-y-0 left-0 shadow-2xl flex' : 'hidden md:flex'}`}
+        style={{ minHeight: 'calc(100vh - 3.5rem)' }}
+      >
+        {/* Top Section */}
+        <div className="p-3.5 space-y-4">
+          
+          {/* Mobile close button */}
+          <div className="flex items-center justify-between md:hidden pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-cyan-400" />
+              <span className="font-bold text-sm text-white tracking-wide">MAVERICK</span>
+            </div>
             <button 
-              onClick={() => onViewChange('investigation-case')}
-              className="text-cyan-400 hover:underline flex items-center gap-0.5"
+              onClick={onCloseMobile}
+              className="p-1 rounded text-slate-400 hover:text-white"
+              aria-label="Close sidebar"
             >
-              Case #0881 <ChevronRight className="w-3 h-3" />
+              <X className="w-4 h-4" />
             </button>
           </div>
-        </div>
 
-      </div>
-
-      {/* Bottom Section: Telemetry & System Node Status */}
-      <div className="p-3 border-t border-slate-800/80 bg-[#05080e] space-y-2.5">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold flex items-center justify-between">
-          <span>SOC Node Health</span>
-          <span className="text-emerald-400 flex items-center gap-1 font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 99.98%
-          </span>
-        </div>
-
-        {/* Load bars */}
-        <div className="space-y-1.5 text-[10px] font-mono text-slate-400">
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <span>AI Ingestion Queue</span>
-              <span className="text-cyan-300">142 msg/sec</span>
+          {/* Core Navigation Links */}
+          <nav className="space-y-1">
+            <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Workspace
             </div>
-            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 w-[68%] rounded-full"></div>
+
+            {mainNav.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                    item.isActive
+                      ? 'bg-slate-800 text-white font-semibold shadow-xs border border-slate-700/60'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${item.isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                    <span className="truncate">{item.label}</span>
+                  </div>
+                  {item.isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Quick link to User Email Analysis */}
+          <div className="pt-2">
+            <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              Submission Mode
             </div>
+            <button
+              onClick={() => handleNavClick('email-analysis')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                currentView === 'email-analysis'
+                  ? 'bg-slate-800 text-white font-semibold border border-slate-700/60'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Mail className="w-4 h-4 shrink-0 text-sky-400" />
+                <span className="truncate">Email Analysis</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-950/60 text-sky-300 border border-sky-800/40">
+                User
+              </span>
+            </button>
           </div>
 
-          <div>
-            <div className="flex justify-between mb-0.5">
-              <span>Threat Intel Correlator</span>
-              <span className="text-amber-300">Active</span>
-            </div>
-            <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 w-[42%] rounded-full"></div>
-            </div>
-          </div>
+          {/* Divider */}
+          <div className="h-px bg-slate-800 my-3"></div>
+
+          {/* Secondary Links: Settings & Profile */}
+          <nav className="space-y-1">
+            <button
+              onClick={() => handleNavClick('settings')}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                currentView === 'settings'
+                  ? 'bg-slate-800 text-white font-semibold border border-slate-700/60'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
+              }`}
+            >
+              <Settings className={`w-4 h-4 shrink-0 ${currentView === 'settings' ? 'text-cyan-400' : 'text-slate-400'}`} />
+              <span>Settings</span>
+            </button>
+
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-850/60 transition-colors text-left cursor-pointer"
+            >
+              <User className="w-4 h-4 shrink-0 text-slate-400" />
+              <span>Profile</span>
+            </button>
+          </nav>
+
         </div>
 
-        {/* Authenticated User Session Card */}
-        {currentUser && (
-          <div className="p-2.5 rounded-lg bg-[#0a1120] border border-cyan-500/20 space-y-2">
-            <div className="flex items-center gap-2.5">
-              {currentUser.picture ? (
-                <img
-                  src={currentUser.picture}
-                  alt={currentUser.name}
-                  className="w-7 h-7 rounded-full border border-cyan-400 object-cover shrink-0"
-                />
+        {/* Bottom User Area */}
+        <div className="p-3 border-t border-slate-800/80 bg-[#070b13]">
+          {currentUser ? (
+            <div className="space-y-2">
+              <div 
+                onClick={() => setShowProfileModal(true)}
+                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors"
+              >
+                {currentUser.picture ? (
+                  <img
+                    src={currentUser.picture}
+                    alt={currentUser.name}
+                    className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-cyan-300 shrink-0">
+                    {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'U'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium text-slate-200 truncate">{currentUser.name || 'User'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{currentUser.email || 'Online'}</div>
+                </div>
+              </div>
+
+              <button
+                onClick={onLogout}
+                className="w-full py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900/50 text-[11px] text-slate-400 hover:text-red-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3 h-3 text-red-400" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-400 text-center py-1">
+              MAVERICK Security Analyzer
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Backdrop for mobile */}
+      {isMobileOpen && (
+        <div 
+          onClick={onCloseMobile}
+          className="fixed inset-0 bg-black/60 z-20 md:hidden backdrop-blur-xs"
+        />
+      )}
+
+      {/* Profile Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0b101d] border border-slate-700 rounded-xl max-w-sm w-full p-5 space-y-4 text-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <User className="w-4 h-4 text-cyan-400" />
+                User Profile
+              </h3>
+              <button 
+                onClick={() => setShowProfileModal(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {currentUser?.picture ? (
+                <img src={currentUser.picture} alt="" className="w-12 h-12 rounded-full border border-cyan-500/40" />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-400/60 flex items-center justify-center text-[10px] font-mono font-bold text-cyan-300 shrink-0">
-                  {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'MK'}
+                <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-base font-bold text-cyan-300">
+                  {currentUser?.name ? currentUser.name[0] : 'U'}
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold text-slate-200 truncate">{currentUser.name || 'Analyst'}</div>
-                <div className="text-[9px] text-cyan-400/70 font-mono truncate">{currentUser.email || 'Authenticated'}</div>
+              <div>
+                <div className="font-semibold text-white">{currentUser?.name || 'Security Analyst'}</div>
+                <div className="text-xs text-slate-400">{currentUser?.email || 'analyst@maverick.security'}</div>
+                <div className="text-[10px] text-cyan-400 font-mono mt-0.5">Role: Forensic Investigator</div>
               </div>
             </div>
-            
-            <button
-              onClick={onLogout}
-              className="w-full py-1.5 px-2 rounded bg-slate-900/80 hover:bg-red-950/50 border border-slate-800 hover:border-red-500/40 text-[10px] font-mono text-slate-400 hover:text-red-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            >
-              <LogOut className="w-3 h-3 text-red-400" />
-              <span>Sign Out</span>
-            </button>
+
+            <div className="p-3 bg-[#080d17] rounded-lg border border-slate-800 text-xs space-y-1.5 text-slate-300">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Environment:</span>
+                <span className="text-slate-200 font-mono">SOC Production</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">SIH 2026 Build:</span>
+                <span className="text-emerald-400 font-mono">v4.2.0 (Verified)</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
+              >
+                Close
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Version info */}
-        <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-[9px] font-mono text-slate-600">
-          <span>MAVERICK SOC v4.2.0</span>
-          <span>SIH-2026 Core</span>
         </div>
-      </div>
-
-    </aside>
+      )}
+    </>
   );
 };

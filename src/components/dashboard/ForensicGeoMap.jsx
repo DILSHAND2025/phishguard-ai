@@ -263,7 +263,7 @@ export const ForensicGeoMap = ({
           <div className="p-2 rounded bg-[#060a14] border border-slate-800/80 text-[10px] text-slate-400 flex items-start gap-2">
             <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
             <p className="leading-tight">
-              <strong className="text-slate-300">CERT-In Admissibility Standard:</strong> {GEO_LEGAL_DISCLAIMER}
+              <strong className="text-slate-300">Evidence Preservation Standard:</strong> {GEO_LEGAL_DISCLAIMER}
             </p>
           </div>
         </div>

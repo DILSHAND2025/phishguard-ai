@@ -3,7 +3,7 @@ import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { EmailAnalysisPage } from './pages/EmailAnalysisPage';
-import { AnalysisResultsPage } from './pages/AnalysisResultsPage';
+import { SecurityAnalyzerPage } from './pages/SecurityAnalyzerPage';
 import { IocIntelPage } from './pages/IocIntelPage';
 import { GeoAsnPage } from './pages/GeoAsnPage';
 import { ThreatGraphPage } from './pages/ThreatGraphPage';
@@ -40,7 +40,8 @@ const BASE_PREFIX = RAW_BASE.replace(/\/$/, ''); // '' for root domain (Vercel),
 const VIEW_TO_REL_PATH = {
   'dashboard': '/dashboard',
   'email-analysis': '/email-analysis',
-  'analysis-results': '/analysis-results',
+  'security-analyzer': '/analyzer',
+  'analysis-results': '/analyzer',
   'ioc-intel': '/ioc-intel',
   'threat-graph': '/threat-graph',
   'geo-asn': '/geo-asn',
@@ -54,7 +55,9 @@ const REL_PATH_TO_VIEW = {
   '/': 'dashboard',
   '/dashboard': 'dashboard',
   '/email-analysis': 'email-analysis',
-  '/analysis-results': 'analysis-results',
+  '/analyzer': 'security-analyzer',
+  '/security-analyzer': 'security-analyzer',
+  '/analysis-results': 'security-analyzer',
   '/ioc-intel': 'ioc-intel',
   '/threat-graph': 'threat-graph',
   '/geo-asn': 'geo-asn',
@@ -82,7 +85,7 @@ function getViewFromCurrentLocation() {
     pathname = pathname.slice(BASE_PREFIX.length);
   }
 
-  // Tolerate '/maverick' prefix even if deployed to root (e.g. legacy bookmark or redirect)
+  // Tolerate '/maverick' prefix even if deployed to root
   if (pathname.startsWith('/maverick')) {
     pathname = pathname.slice('/maverick'.length);
   }
@@ -98,7 +101,7 @@ function getInitialView(user) {
   const rootClean = root.replace(/\/$/, '') || '/';
 
   if (!user) {
-    // Unauthenticated: if user tries to directly access any internal route, redirect to root
+    // Unauthenticated: redirect to root if user tries to access internal routes directly
     if (currentClean !== rootClean) {
       window.history.replaceState(null, '', root);
     }
@@ -118,6 +121,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [currentView, setCurrentView] = useState(() => getInitialView(currentUser));
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
   const [currentAnalysis, setCurrentAnalysis] = useState(null);
   const [fusionWeights, setFusionWeights] = useState(() => {
@@ -275,7 +279,7 @@ function App() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: rawSnippetText }),
-              signal: AbortSignal.timeout(2500)
+              signal: AbortSignal.timeout ? AbortSignal.timeout(2500) : undefined
             });
             if (res.ok) {
               emailAuth = await res.json();
@@ -347,12 +351,12 @@ function App() {
   const handleStartQuickScan = async (presetOrRaw) => {
     setIsScanModalOpen(false);
     await runFullAnalysis(presetOrRaw);
-    handleViewChange('analysis-results');
+    handleViewChange('security-analyzer');
   };
 
   const handleInspectEmail = async (emailItem) => {
     await runFullAnalysis(emailItem);
-    handleViewChange('analysis-results');
+    handleViewChange('security-analyzer');
   };
 
   const handleSelectCase = (caseItem) => {
@@ -362,7 +366,6 @@ function App() {
 
   const handleUpdateWeights = (newWeights) => {
     setFusionWeights(newWeights);
-    // Re-evaluate current analysis with new weights if exists
     if (currentAnalysis?.email) {
       const updatedFusion = calculateEvidenceFusion({
         parsedEmail: currentAnalysis.email,
@@ -401,11 +404,13 @@ function App() {
             onRunAnalysis={runFullAnalysis}
           />
         );
+      case 'security-analyzer':
       case 'analysis-results':
         return (
-          <AnalysisResultsPage
-            onViewChange={handleViewChange}
+          <SecurityAnalyzerPage
             currentAnalysis={currentAnalysis}
+            onViewChange={handleViewChange}
+            onRunAnalysis={runFullAnalysis}
           />
         );
       case 'ioc-intel':
@@ -464,6 +469,8 @@ function App() {
     }
   };
 
+  const isUserEmailView = currentView === 'email-analysis';
+
   return (
     <div className="min-h-screen bg-[#070b13] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
       
@@ -474,22 +481,31 @@ function App() {
         onOpenScan={() => setIsScanModalOpen(true)}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onToggleMobile={() => setIsMobileNavOpen(prev => !prev)}
       />
 
       {/* Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Collapsible/Sticky Sidebar */}
-        <Sidebar
-          currentView={currentView}
-          onViewChange={handleViewChange}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-        />
+        {/* Collapsible/Sticky Sidebar only shown in Analyst views */}
+        {!isUserEmailView && (
+          <Sidebar
+            currentView={currentView}
+            onViewChange={handleViewChange}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            isMobileOpen={isMobileNavOpen}
+            onCloseMobile={() => setIsMobileNavOpen(false)}
+          />
+        )}
 
         {/* Dynamic Page Content Viewport */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gradient-to-b from-[#070b13] via-[#080d19] to-[#060a14]">
-          <div className="max-w-[1600px] mx-auto">
+        <main className={`flex-1 overflow-y-auto ${
+          isUserEmailView 
+            ? 'p-4 sm:p-6 lg:p-8 bg-[#070b13]' 
+            : 'p-4 sm:p-6 lg:p-8 bg-[#070b13]'
+        }`}>
+          <div className={isUserEmailView ? 'max-w-4xl mx-auto' : 'max-w-[1600px] mx-auto'}>
             {renderCurrentView()}
           </div>
         </main>
