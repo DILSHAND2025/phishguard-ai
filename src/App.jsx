@@ -28,6 +28,7 @@ import { createCaseFromAnalysis, persistCaseInvestigation, fetchCaseById } from 
 import { analyzeAttachment } from './services/attachmentForensics';
 import { analyzeEmailAuthentication } from './services/emailAuthService';
 import { defaultHashReputationService } from './services/hashReputationService';
+import { getApiBaseUrl } from './services/apiConfig';
 
 import './App.css';
 
@@ -266,11 +267,13 @@ function App() {
       let emailAuth = null;
       const rawSnippetText = parsedEmail.rawSnippet || (typeof emailInput === 'string' ? emailInput : '');
       if (rawSnippetText) {
+        const apiBase = getApiBaseUrl();
         const authEndpoints = [
+          apiBase ? `${apiBase}/api/email-authentication` : '',
           '/api/email-authentication',
           'http://localhost:5000/api/email-authentication',
           'http://127.0.0.1:5000/api/email-authentication'
-        ];
+        ].filter(Boolean);
 
         for (const endpoint of authEndpoints) {
           try {
