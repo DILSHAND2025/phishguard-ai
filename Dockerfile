@@ -28,6 +28,9 @@ RUN npm ci --omit=dev
 # Copy entire application code
 COPY . .
 
+# Generate Prisma Client for Linux/Debian production environment
+RUN npx prisma generate
+
 # Set execution permissions and strip carriage returns
 RUN sed -i 's/\r$//' ./scripts/start-backend.sh && chmod +x ./scripts/start-backend.sh
 

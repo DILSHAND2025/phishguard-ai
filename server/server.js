@@ -24,6 +24,15 @@ import { buildForensicReport } from '../src/services/forensicReportService.js';
 import { generateForensicPdf, computePdfFileHash } from '../src/services/pdfBuilder.js';
 import { isPrivateOrReservedIP } from '../src/services/emailParser.js';
 import { OAuth2Client } from 'google-auth-library';
+import { 
+  saveCase, 
+  getCases, 
+  getCaseByCaseId, 
+  updateCaseStatus as dbUpdateCaseStatus, 
+  getCaseStats, 
+  isDatabaseAvailable, 
+  DatabaseUnavailableError 
+} from './caseDatabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,12 +52,14 @@ const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const CACHE = new Map();
 
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, extraHeaders = {}) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Expose-Headers': 'X-Total-Count, X-Page, X-Total-Pages, X-Limit',
+    ...extraHeaders
   });
   res.end(JSON.stringify(data));
 }
@@ -86,8 +97,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Expose-Headers': 'X-Total-Count, X-Page, X-Total-Pages, X-Limit'
     });
     return res.end();
   }
@@ -97,10 +109,13 @@ const server = http.createServer(async (req, res) => {
 
   // Root and Health check
   if (pathname === '/' || pathname === '/health' || pathname === '/api/health') {
+    const dbActive = await isDatabaseAvailable();
     return sendJson(res, 200, {
       status: 'online',
       service: 'MAVERICK Intelligence & Machine Learning Gateway',
       environment: 'SIH-2026',
+      databaseConfigured: Boolean(process.env.DATABASE_URL),
+      databaseConnected: dbActive,
       vtKeyConfigured: Boolean(VT_API_KEY),
       abuseKeyConfigured: Boolean(ABUSE_API_KEY),
       cachedEntries: CACHE.size,
@@ -110,7 +125,12 @@ const server = http.createServer(async (req, res) => {
         'GET  /api/geoip?ip=<ip>',
         'GET  /api/enrich?ioc=<ioc>&type=<IP|DOMAIN|HASH>',
         'POST /api/forensic-report/compile',
-        'POST /api/forensic-report/pdf'
+        'POST /api/forensic-report/pdf',
+        'GET  /api/cases (sorted by threatScore DESC)',
+        'POST /api/cases (save analyzed email investigation)',
+        'GET  /api/cases/:caseId (retrieve complete stored case)',
+        'PATCH /api/cases/:caseId (archive or update status)',
+        'GET  /api/cases/stats (live database counts and top threats)'
       ]
     });
   }
@@ -705,6 +725,141 @@ const server = http.createServer(async (req, res) => {
       }
     });
     return;
+  }
+
+  // Case Management Statistics Endpoint: GET /api/cases/stats
+  if (pathname === '/api/cases/stats' && req.method === 'GET') {
+    try {
+      const stats = await getCaseStats();
+      return sendJson(res, 200, stats);
+    } catch (err) {
+      if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
+        return sendJson(res, 503, {
+          success: false,
+          error: 'Database is unavailable or DATABASE_URL is not configured.',
+          status: 'DB_UNAVAILABLE'
+        });
+      }
+      return sendJson(res, 500, { success: false, error: err.message });
+    }
+  }
+
+  // Cases Collection Endpoint: GET /api/cases & POST /api/cases
+  if (pathname === '/api/cases') {
+    if (req.method === 'GET') {
+      try {
+        const priority = parsedUrl.query.priority;
+        const classification = parsedUrl.query.classification;
+        const status = parsedUrl.query.status || 'active';
+        const page = parsedUrl.query.page || 1;
+        const limit = parsedUrl.query.limit || 20;
+        const search = parsedUrl.query.search || '';
+        const format = parsedUrl.query.format;
+
+        const result = await getCases({ priority, classification, status, page, limit, search });
+
+        const extraHeaders = {
+          'X-Total-Count': String(result.total),
+          'X-Page': String(result.page),
+          'X-Limit': String(result.limit),
+          'X-Total-Pages': String(result.totalPages)
+        };
+
+        if (format === 'envelope' || parsedUrl.query.envelope === 'true') {
+          return sendJson(res, 200, result, extraHeaders);
+        }
+        // Default response: JSON array of cases, sorted by threatScore DESC then createdAt DESC
+        return sendJson(res, 200, result.cases, extraHeaders);
+      } catch (err) {
+        if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
+          return sendJson(res, 503, {
+            success: false,
+            error: 'Database is unavailable or DATABASE_URL is not configured.',
+            status: 'DB_UNAVAILABLE'
+          });
+        }
+        return sendJson(res, 500, { success: false, error: err.message });
+      }
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const saved = await saveCase(payload);
+          return sendJson(res, saved.isDuplicate ? 200 : 201, {
+            success: true,
+            caseId: saved.caseId,
+            isDuplicate: saved.isDuplicate,
+            case: saved.case
+          });
+        } catch (err) {
+          if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
+            return sendJson(res, 503, {
+              success: false,
+              error: 'Analysis completed, but the case could not be saved. Database is unavailable.',
+              status: 'DB_UNAVAILABLE'
+            });
+          }
+          return sendJson(res, 400, { success: false, error: err.message });
+        }
+      });
+      return;
+    }
+  }
+
+  // Single Case Endpoint: GET /api/cases/:caseId & PATCH /api/cases/:caseId
+  const caseIdMatch = pathname.match(/^\/api\/cases\/([A-Za-z0-9_-]+)$/);
+  if (caseIdMatch && caseIdMatch[1] !== 'stats') {
+    const targetCaseId = caseIdMatch[1];
+    if (req.method === 'GET') {
+      try {
+        const item = await getCaseByCaseId(targetCaseId);
+        if (!item) {
+          return sendJson(res, 404, { success: false, error: `Case ${targetCaseId} not found` });
+        }
+        return sendJson(res, 200, item);
+      } catch (err) {
+        if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
+          return sendJson(res, 503, {
+            success: false,
+            error: 'Database is unavailable or DATABASE_URL is not configured.',
+            status: 'DB_UNAVAILABLE'
+          });
+        }
+        return sendJson(res, 500, { success: false, error: err.message });
+      }
+    }
+
+    if (req.method === 'PATCH') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          if (!payload.status) {
+            return sendJson(res, 400, { success: false, error: 'Missing status parameter in update request' });
+          }
+          const updated = await dbUpdateCaseStatus(targetCaseId, payload.status);
+          if (!updated) {
+            return sendJson(res, 404, { success: false, error: `Case ${targetCaseId} not found` });
+          }
+          return sendJson(res, 200, { success: true, case: updated });
+        } catch (err) {
+          if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
+            return sendJson(res, 503, {
+              success: false,
+              error: 'Database is unavailable or DATABASE_URL is not configured.',
+              status: 'DB_UNAVAILABLE'
+            });
+          }
+          return sendJson(res, 400, { success: false, error: err.message });
+        }
+      });
+      return;
+    }
   }
 
   // Fallback 404

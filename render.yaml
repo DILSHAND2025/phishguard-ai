@@ -11,6 +11,8 @@ services:
         value: 10000
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        sync: false
       - key: VIRUSTOTAL_API_KEY
         sync: false
       - key: ABUSEIPDB_API_KEY

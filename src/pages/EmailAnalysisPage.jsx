@@ -335,7 +335,14 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">Email Security Result</h1>
-              <div className="text-xs font-mono text-slate-400 mt-0.5">Case ID: {caseId}</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs font-mono text-slate-400">Case ID: <strong className="text-cyan-300">{caseId}</strong></span>
+                {currentAnalysis.isSaved ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/50 text-emerald-300">
+                    Saved to Database
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <button
@@ -346,6 +353,18 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
               <span>Check Another Email</span>
             </button>
           </div>
+
+          {/* Database Persistence Failure Alert (Requirement 19) */}
+          {currentAnalysis.dbSaveError && (
+            <div className="rounded-xl bg-amber-950/40 border border-amber-500/50 p-4 text-xs text-amber-200 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-semibold text-amber-100">Persistence Notice</div>
+                <p>Analysis completed, but the case could not be saved. Please retry saving the case.</p>
+                <p className="text-[11px] text-amber-400/80 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
+              </div>
+            </div>
+          )}
 
           {/* Main Threat Card */}
           <div className="rounded-2xl bg-[#090d16] border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">

@@ -1,401 +1,391 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Briefcase, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Clock, 
-  ArrowRight, 
-  ArrowLeft,
-  UserCheck, 
-  Layers, 
-  FileText,
-  Lock,
-  Ban,
-  Trash2,
-  Send,
-  Target,
-  AlertTriangle,
-  GitFork,
-  Radio,
-  Check
+  Search, 
+  RefreshCw, 
+  ChevronRight, 
+  Archive, 
+  RotateCcw, 
+  AlertTriangle, 
+  Inbox 
 } from 'lucide-react';
-import { getStoredCases, updateCaseStatus, toggleCaseContainment, addCaseNote } from '../services/caseStore';
+import { 
+  fetchCases, 
+  archiveCase, 
+  getThreatPriority, 
+  getPriorityStyle 
+} from '../services/caseStore.js';
 
-export const InvestigationCasePage = ({ onViewChange, selectedCase, currentAnalysis }) => {
-  const [cases, setCases] = useState(getStoredCases());
-  const activeCaseId = selectedCase?.caseId || currentAnalysis?.caseItem?.caseId || cases[0]?.caseId;
-  const currentCase = cases.find(c => c.caseId === activeCaseId) || cases[0] || {};
+export const InvestigationCasePage = ({ 
+  onViewChange, 
+  onOpenCase, 
+  _currentAnalysis,
+  dbError
+}) => {
+  const [cases, setCases] = useState([]);
+  const [totalCases, setTotalCases] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [selectedPriority, setSelectedPriority] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'archived'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isDbUnavailable, setIsDbUnavailable] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
-  const [newNoteText, setNewNoteText] = useState('');
-  const [analystName, setAnalystName] = useState('Analyst (Lead)');
+  // Load cases from PostgreSQL backend
+  const loadCases = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
 
-  const handleStatusChange = (newStatus) => {
-    const updated = updateCaseStatus(currentCase.caseId, newStatus);
-    setCases(updated);
+    const result = await fetchCases({
+      priority: selectedPriority === 'All' ? undefined : selectedPriority,
+      status: statusFilter,
+      page: currentPage,
+      limit: 20,
+      search: searchQuery
+    });
+
+    setCases(result.cases || []);
+    setTotalCases(result.total || 0);
+    setTotalPages(result.totalPages || 1);
+    setIsDbUnavailable(Boolean(result.isDbUnavailable));
+
+    if (result.isDbUnavailable && result.error) {
+      setErrorMessage(result.error);
+    }
+
+    setLoading(false);
+  }, [selectedPriority, statusFilter, currentPage, searchQuery]);
+
+  useEffect(() => {
+    loadCases();
+  }, [loadCases]);
+
+  // Handle Archive / Reopen toggle
+  const handleToggleArchive = async (e, caseItem) => {
+    e.stopPropagation();
+    const newStatus = caseItem.status === 'archived' ? 'active' : 'archived';
+    const res = await archiveCase(caseItem.caseId, newStatus);
+    if (res.success) {
+      loadCases();
+    } else {
+      alert(`Failed to update case status: ${res.error || 'Unknown error'}`);
+    }
   };
 
-  const handleToggleContainment = (actionKey) => {
-    const updated = toggleCaseContainment(currentCase.caseId, actionKey);
-    setCases(updated);
+  // Open case investigation without re-analyzing
+  const handleCaseClick = (caseItem) => {
+    if (onOpenCase) {
+      onOpenCase(caseItem);
+    } else if (onViewChange) {
+      onViewChange('security-analyzer');
+    }
   };
 
-  const handleAddNote = (e) => {
-    e.preventDefault();
-    if (!newNoteText.trim()) return;
-    const updated = addCaseNote(currentCase.caseId, newNoteText.trim(), analystName);
-    setCases(updated);
-    setNewNoteText('');
-  };
-
-  const campaign = currentAnalysis?.campaign || {
-    campaignId: 'TC-001',
-    title: 'Correlated Threat Campaign via Shared IP [185.220.101.45]',
-    confidence: 'HIGH (Infrastructure Cluster)',
-    clusterType: 'Shared Originating Subnet',
-    emailCount: 3,
-    domainCount: 2,
-    targetsCount: 4,
-    correlationReason: 'Potential threat campaign based on shared network infrastructure: Originating IP 185.220.101.45 and AS9009 observed across multiple ingress attempts targeting state treasury and procurement officials.'
-  };
-
-  const containment = currentCase.containmentStatus || {
-    mailboxPurged: false,
-    domainBlocked: true,
-    ipBlocked: true,
-    credentialsRevoked: false
-  };
+  const priorityTabs = [
+    { id: 'All', label: 'All' },
+    { id: 'Critical', label: 'Critical' },
+    { id: 'High', label: 'High' },
+    { id: 'Medium', label: 'Medium' },
+    { id: 'Low', label: 'Low' }
+  ];
 
   return (
-    <div className="space-y-6 pb-12 font-sans">
+    <div className="space-y-6 pb-16 font-sans">
       
-      {/* Top Banner Header */}
-      <div className="rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#0d162a] to-[#070b13] border border-amber-500/30 p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Page Header */}
+      <div className="rounded-2xl bg-[#090e1a] border border-slate-800 p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-amber-400 text-xs font-mono mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-              STAGE 07 OF 08 • INCIDENT WAR ROOM & CAMPAIGN CORRELATION
+            <div className="flex items-center gap-2 text-cyan-400 text-xs font-mono mb-1.5 uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+              MAVERICK • SOC INCIDENT MANAGEMENT
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
-                <Briefcase className="w-6 h-6 text-amber-400" />
-                <span>Investigation Case: {currentCase.caseId}</span>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <Briefcase className="w-6 h-6 text-cyan-400" />
+                <span>Cases</span>
               </h1>
-              <span className={`px-2.5 py-0.5 rounded text-xs font-mono font-extrabold border ${
-                currentCase.status === 'CONFIRMED THREAT' 
-                  ? 'bg-red-950 text-red-300 border-red-500/40'
-                  : currentCase.status === 'UNDER INVESTIGATION'
-                    ? 'bg-amber-950 text-amber-300 border-amber-500/40'
-                    : 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
-              }`}>
-                {currentCase.status}
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                {totalCases} {statusFilter === 'archived' ? 'Archived' : 'Active'}
               </span>
             </div>
-            <p className="text-xs text-slate-300 mt-1.5 font-mono">
-              {currentCase.title}
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              Persistent security incident queue prioritized by Evidence Fusion threat score. Highest-risk emails appear at the top.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onViewChange('threat-graph')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-700 text-slate-300 font-mono text-xs transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Graph</span>
-            </button>
+          <div className="flex items-center gap-2.5">
+            {/* Active / Archived Toggle */}
+            <div className="flex items-center bg-[#060a14] rounded-xl p-1 border border-slate-800 text-xs font-medium">
+              <button
+                onClick={() => { setStatusFilter('active'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                  statusFilter === 'active'
+                    ? 'bg-slate-800 text-white shadow-xs font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Active Cases
+              </button>
+              <button
+                onClick={() => { setStatusFilter('archived'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                  statusFilter === 'archived'
+                    ? 'bg-slate-800 text-white shadow-xs font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Archived
+              </button>
+            </div>
 
             <button
-              type="button"
-              onClick={() => onViewChange('forensic-report')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer"
+              onClick={loadCases}
+              disabled={loading}
+              className="p-2.5 rounded-xl bg-[#0d1627] hover:bg-[#13223f] border border-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer"
+              title="Refresh Cases"
             >
-              <FileText className="w-4 h-4" />
-              <span>Generate Forensic Report</span>
-              <ArrowRight className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Grid: Case Details & Containment */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-xs">
+      {/* Database Availability Notice */}
+      {(isDbUnavailable || dbError) && (
+        <div className="rounded-xl bg-amber-950/30 border border-amber-500/40 p-4 text-xs text-amber-300 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-semibold text-amber-200">Database Connection Notice</div>
+            <p className="text-amber-300/90 leading-relaxed">
+              {errorMessage || dbError || 'PostgreSQL database connection is unconfigured or offline. Set DATABASE_URL in your .env configuration to enable persistent storage.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         
-        {/* Left 2 Cols: Case Telemetry, Campaign Correlation, and Notes */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Metadata Card */}
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-              <span className="font-bold uppercase tracking-wider text-slate-200">
-                Incident Telemetry & Priority Parameters
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 text-[10px]">Status:</span>
-                <select
-                  value={currentCase.status}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  className="bg-[#060a14] border border-slate-700 text-cyan-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-cyan-400"
-                >
-                  <option value="UNDER INVESTIGATION">🟡 UNDER INVESTIGATION</option>
-                  <option value="CONFIRMED THREAT">🔴 CONFIRMED THREAT</option>
-                  <option value="FALSE POSITIVE">🟢 FALSE POSITIVE</option>
-                  <option value="CLOSED">⚫ CLOSED</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Risk Score</span>
-                <span className="text-xl font-black text-red-400">{currentCase.riskScore} / 100</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Assigned Lead</span>
-                <span className="text-cyan-300 font-bold">{currentCase.assignedAnalyst}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Correlated IOCs</span>
-                <span className="text-white font-bold">{currentCase.iocsCount} Artifacts</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Attributed Cluster</span>
-                <span className="text-purple-300 font-bold">{currentCase.threatActorGroup}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Targeted VIPs</span>
-                <span className="text-amber-300 font-bold">{currentCase.affectedTargets} Mailboxes</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[10px] uppercase block">Created Timestamp</span>
-                <span className="text-slate-300">{currentCase.creationTime}</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800 text-slate-300 font-sans text-xs leading-relaxed">
-              {currentCase.summary}
-            </div>
-          </div>
-
-          {/* Phase 9: Threat Campaign Correlation Section (MAJOR NOVELTY) */}
-          <div className="rounded-xl bg-gradient-to-r from-[#0e172a] via-[#091122] to-[#070b13] border border-cyan-500/40 p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-cyan-400" />
-                <h3 className="font-bold text-white uppercase tracking-wider text-xs">
-                  Threat Campaign Infrastructure Correlation
-                </h3>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold">
-                CLUSTER: {campaign.campaignId}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-300 font-sans leading-relaxed">
-              <strong>{campaign.title}</strong>
-            </p>
-
-            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              {campaign.correlationReason}
-            </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center font-mono">
-              <div className="p-2 rounded bg-[#060a14] border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Related Emails</span>
-                <span className="text-sm font-bold text-white">{campaign.emailCount || 3} Emails</span>
-              </div>
-              <div className="p-2 rounded bg-[#060a14] border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Lookalike Domains</span>
-                <span className="text-sm font-bold text-cyan-300">{campaign.domainCount || 2} Domains</span>
-              </div>
-              <div className="p-2 rounded bg-[#060a14] border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Shared IP Nodes</span>
-                <span className="text-sm font-bold text-purple-300">1 Shared IP</span>
-              </div>
-              <div className="p-2 rounded bg-[#060a14] border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Targeted Units</span>
-                <span className="text-sm font-bold text-amber-300">{campaign.targetsCount || 4} Mailboxes</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Investigator Notes & Activity Log */}
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-              <span className="font-bold text-white uppercase tracking-wider text-xs flex items-center gap-2">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                Investigator Chronological Notes ({currentCase.notes?.length || 0})
-              </span>
-            </div>
-
-            {/* Existing Notes List */}
-            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-              {(currentCase.notes || []).map((note) => (
-                <div key={note.id} className="p-3 rounded-lg bg-[#060a14] border border-slate-800 space-y-1">
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-cyan-300 font-bold">{note.author}</span>
-                    <span className="text-slate-500">{note.timestamp}</span>
-                  </div>
-                  <p className="text-slate-300 font-sans text-xs leading-relaxed">
-                    {note.text}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Add Note Form */}
-            <form onSubmit={handleAddNote} className="pt-2 border-t border-slate-800 space-y-2">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={analystName}
-                  onChange={(e) => setAnalystName(e.target.value)}
-                  placeholder="Analyst designation..."
-                  className="w-1/3 p-2 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
-                />
-                <input
-                  type="text"
-                  value={newNoteText}
-                  onChange={(e) => setNewNoteText(e.target.value)}
-                  placeholder="Add case observation, MITRE tactic, or containment update..."
-                  className="flex-1 p-2 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg transition-colors flex items-center gap-1"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Log</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
+        {/* Search input */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            placeholder="Search cases by subject, sender, or case ID..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0a101f] border border-slate-800 text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-500 transition-colors font-sans"
+          />
         </div>
 
-        {/* Right 1 Col: Active Containment Actions Checklist */}
-        <div className="space-y-6">
-          
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 shadow-lg space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-              <span className="font-bold text-white uppercase tracking-wider text-xs flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-400" />
-                Active Containment Playbook
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">SOC Actions</span>
-            </div>
-
-            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Verify and enforce defensive containment workflows across email gateways, firewalls, and active directory endpoints.
-            </p>
-
-            <div className="space-y-2.5">
-              
-              {/* Action 1: Mailbox Purged */}
-              <div
-                onClick={() => handleToggleContainment('mailboxPurged')}
-                className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                  containment.mailboxPurged 
-                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' 
-                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
+        {/* Priority Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {priorityTabs.map((tab) => {
+            const isSelected = selectedPriority === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => { setSelectedPriority(tab.id); setCurrentPage(1); }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium font-mono transition-all cursor-pointer ${
+                  isSelected
+                    ? tab.id === 'Critical'
+                      ? 'bg-red-950 text-red-300 border border-red-500 font-bold shadow-xs'
+                      : tab.id === 'High'
+                        ? 'bg-orange-950 text-orange-300 border border-orange-500 font-bold shadow-xs'
+                        : tab.id === 'Medium'
+                          ? 'bg-amber-950 text-amber-300 border border-amber-500 font-bold shadow-xs'
+                          : tab.id === 'Low'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold shadow-xs'
+                            : 'bg-cyan-950 text-cyan-300 border border-cyan-500 font-bold shadow-xs'
+                    : 'bg-[#080e1c] text-slate-400 hover:text-slate-200 border border-slate-800'
                 }`}
               >
-                <div className="space-y-0.5">
-                  <span className="font-bold text-xs block text-white">Quarantine Mailbox Ingress</span>
-                  <span className="text-[10px] text-slate-400">Purge malicious message from inboxes</span>
-                </div>
-                <span className={`w-5 h-5 rounded flex items-center justify-center border ${
-                  containment.mailboxPurged ? 'bg-emerald-600 border-emerald-400 text-white' : 'border-slate-700'
-                }`}>
-                  {containment.mailboxPurged && <Check className="w-3.5 h-3.5" />}
-                </span>
-              </div>
-
-              {/* Action 2: Domain Sinkholed */}
-              <div
-                onClick={() => handleToggleContainment('domainBlocked')}
-                className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                  containment.domainBlocked 
-                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' 
-                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="space-y-0.5">
-                  <span className="font-bold text-xs block text-white">Sinkhole Phishing Domain</span>
-                  <span className="text-[10px] text-slate-400">Apply DNS firewall RPZ block rule</span>
-                </div>
-                <span className={`w-5 h-5 rounded flex items-center justify-center border ${
-                  containment.domainBlocked ? 'bg-emerald-600 border-emerald-400 text-white' : 'border-slate-700'
-                }`}>
-                  {containment.domainBlocked && <Check className="w-3.5 h-3.5" />}
-                </span>
-              </div>
-
-              {/* Action 3: IP Blocked */}
-              <div
-                onClick={() => handleToggleContainment('ipBlocked')}
-                className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                  containment.ipBlocked 
-                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' 
-                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="space-y-0.5">
-                  <span className="font-bold text-xs block text-white">Block Originating IP</span>
-                  <span className="text-[10px] text-slate-400">Drop traffic at edge router / firewall</span>
-                </div>
-                <span className={`w-5 h-5 rounded flex items-center justify-center border ${
-                  containment.ipBlocked ? 'bg-emerald-600 border-emerald-400 text-white' : 'border-slate-700'
-                }`}>
-                  {containment.ipBlocked && <Check className="w-3.5 h-3.5" />}
-                </span>
-              </div>
-
-              {/* Action 4: Credentials Revoked */}
-              <div
-                onClick={() => handleToggleContainment('credentialsRevoked')}
-                className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
-                  containment.credentialsRevoked 
-                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' 
-                    : 'bg-[#060a14] border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="space-y-0.5">
-                  <span className="font-bold text-xs block text-white">Revoke Targeted Credentials</span>
-                  <span className="text-[10px] text-slate-400">Force password reset & token invalidation</span>
-                </div>
-                <span className={`w-5 h-5 rounded flex items-center justify-center border ${
-                  containment.credentialsRevoked ? 'bg-emerald-600 border-emerald-400 text-white' : 'border-slate-700'
-                }`}>
-                  {containment.credentialsRevoked && <Check className="w-3.5 h-3.5" />}
-                </span>
-              </div>
-
-            </div>
-          </div>
-
-          {/* Quick Case Switcher */}
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-4 space-y-2">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-              Other Active Cases in Queue:
-            </span>
-            <div className="space-y-1.5">
-              {cases.map(c => (
-                <div
-                  key={c.caseId}
-                  className={`p-2 rounded border cursor-pointer flex items-center justify-between transition-colors ${
-                    c.caseId === currentCase.caseId ? 'bg-cyan-950/80 border-cyan-500/50 text-white' : 'bg-[#060a14] border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span className="font-bold">{c.caseId}</span>
-                  <span className="text-[10px] text-amber-300">{c.riskScore}/100</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
+                [{tab.label}]
+              </button>
+            );
+          })}
         </div>
+      </div>
+
+      {/* Case Queue Table */}
+      <div className="rounded-2xl bg-[#090f1e] border border-slate-800/80 overflow-hidden shadow-md">
+        
+        {loading && cases.length === 0 ? (
+          <div className="py-20 text-center space-y-3">
+            <RefreshCw className="w-7 h-7 text-cyan-400 animate-spin mx-auto" />
+            <p className="text-xs text-slate-400 font-mono">Loading cases from PostgreSQL database...</p>
+          </div>
+        ) : cases.length === 0 ? (
+          <div className="py-20 text-center max-w-md mx-auto space-y-3">
+            <Inbox className="w-10 h-10 text-slate-600 mx-auto" />
+            <h3 className="text-sm font-semibold text-slate-300">No cases found in queue</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {searchQuery || selectedPriority !== 'All' 
+                ? 'No cases match your active filters. Try clearing the search or priority filter.'
+                : 'Scanned emails will appear here prioritized by risk score once ingested.'}
+            </p>
+            <button
+              onClick={() => onViewChange('email-analysis')}
+              className="mt-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold cursor-pointer"
+            >
+              Ingest & Scan Email
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wider bg-[#070b16]">
+                  <th className="py-3 px-4 text-center w-28">Threat Score</th>
+                  <th className="py-3 px-3 w-28">Priority</th>
+                  <th className="py-3 px-4 w-44">Case ID</th>
+                  <th className="py-3 px-4">Subject</th>
+                  <th className="py-3 px-4">Sender</th>
+                  <th className="py-3 px-4 w-36">Classification</th>
+                  <th className="py-3 px-4 w-40">Date</th>
+                  <th className="py-3 px-4 text-right w-28">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/70 font-sans">
+                {cases.map((c) => {
+                  const score = typeof c.threatScore === 'number' ? c.threatScore : 0;
+                  const priority = c.priority || getThreatPriority(score);
+                  const style = getPriorityStyle(priority);
+
+                  return (
+                    <tr
+                      key={c.caseId || c.id}
+                      onClick={() => handleCaseClick(c)}
+                      className={`hover:bg-[#0c1830] transition-colors cursor-pointer group ${
+                        priority.toLowerCase() === 'critical' ? 'bg-red-950/10' : ''
+                      }`}
+                    >
+                      {/* Threat Score (Highest risk visually prominent) */}
+                      <td className="py-3.5 px-4 text-center font-mono font-bold">
+                        <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-sm border font-extrabold ${
+                          score >= 80 
+                            ? 'bg-red-950/80 text-red-300 border-red-500/80 shadow-[0_0_10px_rgba(239,68,68,0.25)]' 
+                            : score >= 60 
+                              ? 'bg-orange-950/80 text-orange-300 border-orange-500/70' 
+                              : score >= 30 
+                                ? 'bg-amber-950/80 text-amber-300 border-amber-500/60' 
+                                : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60'
+                        }`}>
+                          {score}
+                        </span>
+                      </td>
+
+                      {/* Priority */}
+                      <td className="py-3.5 px-3 whitespace-nowrap font-mono">
+                        <span className={`text-[10px] px-2 py-0.5 rounded uppercase border font-bold ${style.badge}`}>
+                          {priority}
+                        </span>
+                      </td>
+
+                      {/* Case ID */}
+                      <td className="py-3.5 px-4 font-mono font-bold text-cyan-300 group-hover:text-cyan-200 transition-colors whitespace-nowrap">
+                        {c.caseId}
+                      </td>
+
+                      {/* Subject */}
+                      <td className="py-3.5 px-4 max-w-sm">
+                        <div className="font-medium text-slate-100 group-hover:text-cyan-300 transition-colors truncate">
+                          {c.subject || '(No Subject)'}
+                        </div>
+                        {c.riskSummary && (
+                          <div className="text-[11px] text-slate-400 truncate mt-0.5 font-sans">
+                            {c.riskSummary}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Sender */}
+                      <td className="py-3.5 px-4 text-slate-300 max-w-xs truncate text-xs">
+                        {c.sender}
+                      </td>
+
+                      {/* Classification */}
+                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-xs">
+                        <span className={`px-2 py-0.5 rounded text-[11px] ${
+                          (c.classification || '').toLowerCase() === 'phishing'
+                            ? 'bg-red-950/60 text-red-300 border border-red-900/60'
+                            : (c.classification || '').toLowerCase() === 'suspicious'
+                              ? 'bg-amber-950/60 text-amber-300 border border-amber-900/60'
+                              : 'bg-emerald-950/60 text-emerald-300 border border-emerald-900/60'
+                        }`}>
+                          {c.classification || 'Phishing'}
+                        </span>
+                      </td>
+
+                      {/* Date */}
+                      <td className="py-3.5 px-4 text-slate-400 text-xs whitespace-nowrap font-mono">
+                        {c.analyzedAt ? new Date(c.analyzedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : (c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A')}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleCaseClick(c)}
+                            className="p-1.5 rounded-lg bg-[#0e192f] hover:bg-cyan-900/60 border border-cyan-500/30 text-cyan-300 text-xs transition-colors cursor-pointer"
+                            title="Open Security Analyzer"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={(e) => handleToggleArchive(e, c)}
+                            className="p-1.5 rounded-lg bg-[#0e192f] hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-white text-xs transition-colors cursor-pointer"
+                            title={c.status === 'archived' ? 'Reopen Case' : 'Archive Case'}
+                          >
+                            {c.status === 'archived' ? (
+                              <RotateCcw className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <Archive className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800 bg-[#070b16] text-xs font-mono text-slate-400">
+            <div>
+              Page <strong className="text-slate-200">{currentPage}</strong> of <strong className="text-slate-200">{totalPages}</strong> ({totalCases} total cases)
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="px-2.5 py-1 rounded bg-[#0d1627] border border-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Previous
+              </button>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="px-2.5 py-1 rounded bg-[#0d1627] border border-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
 

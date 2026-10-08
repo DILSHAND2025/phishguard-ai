@@ -1,0 +1,54 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+model EmailCase {
+  id                    String    @id @default(uuid())
+  caseId                String    @unique
+  subject               String    @default("(No Subject)")
+  sender                String    @default("unknown@sender.local")
+  recipient             String    @default("unknown@recipient.local")
+  receivedAt            DateTime?
+  analyzedAt            DateTime  @default(now())
+
+  threatScore           Int       @default(0)
+  priority              String    @default("Low") // Critical, High, Medium, Low
+  classification        String    @default("Legitimate") // Phishing, Suspicious, Legitimate
+  confidence            Float     @default(0.0)
+
+  phishingProbability   Float?
+  legitimateProbability Float?
+
+  riskSummary           String?   @db.Text
+  originalFilename      String?
+  emailHash             String    // SHA-256 content hash for duplicate detection
+
+  status                String    @default("active") // active, archived, closed
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Structured JSON forensic findings
+  headers               Json?
+  iocs                  Json?
+  geoIntelligence       Json?
+  authenticationResults Json?
+  attachmentFindings    Json?
+  evidenceFusion        Json?
+  recommendations       Json?
+  timeline              Json?
+  forensicMetadata      Json?
+
+  @@index([threatScore(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([priority])
+  @@index([classification])
+  @@index([status])
+  @@index([emailHash])
+  @@map("email_cases")
+}

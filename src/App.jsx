@@ -24,11 +24,10 @@ import { resolveIPGeo } from './services/geoAsnService';
 import { defaultGeoService } from './services/geoLocationService';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from './services/evidenceFusion';
 import { correlateThreatCampaigns } from './services/campaignCorrelator';
-import { createCaseFromAnalysis } from './services/caseStore';
+import { createCaseFromAnalysis, persistCaseInvestigation, fetchCaseById } from './services/caseStore';
 import { analyzeAttachment } from './services/attachmentForensics';
 import { analyzeEmailAuthentication } from './services/emailAuthService';
 import { defaultHashReputationService } from './services/hashReputationService';
-import { SYNTHETIC_SCENARIOS } from './data/syntheticScenarios';
 
 import './App.css';
 
@@ -310,14 +309,47 @@ function App() {
       const campaigns = correlateThreatCampaigns([parsedEmail]);
       const primaryCampaign = campaigns[0] || null;
 
-      // 8. Case Creation / Linkage
-      const caseItem = createCaseFromAnalysis({
+      // 8. Case Creation & Persistent Database Storage (Requirement 6)
+      let caseItem = createCaseFromAnalysis({
         email: parsedEmail,
         fusion,
         aiThreat,
         iocs,
         campaign: primaryCampaign
       });
+
+      let dbSaveError = null;
+      try {
+        const saveRes = await persistCaseInvestigation({
+          email: parsedEmail,
+          fusion,
+          aiThreat,
+          iocs,
+          geoInfo,
+          geoList,
+          emailAuth,
+          campaign: primaryCampaign,
+          originalFilename: parsedEmail.filename
+        });
+
+        if (saveRes.success) {
+          caseItem = {
+            ...caseItem,
+            caseId: saveRes.caseId,
+            id: saveRes.case?.id,
+            isDuplicate: saveRes.isDuplicate,
+            isSaved: true
+          };
+        } else {
+          dbSaveError = saveRes.error || 'Database persistence failed';
+          caseItem.isSaved = false;
+          caseItem.saveError = dbSaveError;
+        }
+      } catch (saveErr) {
+        dbSaveError = saveErr.message || 'Database persistence failed';
+        caseItem.isSaved = false;
+        caseItem.saveError = dbSaveError;
+      }
 
       const analysisResult = {
         email: parsedEmail,
@@ -329,7 +361,10 @@ function App() {
         networkIndicators,
         fusion,
         campaign: primaryCampaign,
-        caseItem
+        caseItem,
+        caseId: caseItem.caseId,
+        isSaved: Boolean(caseItem.isSaved),
+        dbSaveError
       };
 
       setCurrentAnalysis(analysisResult);
@@ -341,12 +376,70 @@ function App() {
     }
   }, [fusionWeights]);
 
-  // Run initial baseline analysis on mount with first scenario
-  useEffect(() => {
-    if (currentUser) {
-      runFullAnalysis(SYNTHETIC_SCENARIOS[0]);
+  // Handle opening an existing case from PostgreSQL without re-running analysis (Requirement 16)
+  const handleOpenCase = useCallback(async (caseItemOrId) => {
+    let fullCase = null;
+    const caseId = typeof caseItemOrId === 'string' ? caseItemOrId : caseItemOrId?.caseId;
+
+    if (!caseId) return;
+
+    if (caseItemOrId && typeof caseItemOrId === 'object' && caseItemOrId.evidenceFusion) {
+      fullCase = caseItemOrId;
+    } else {
+      fullCase = await fetchCaseById(caseId);
     }
-  }, [currentUser, runFullAnalysis]);
+
+    if (!fullCase) {
+      alert(`Could not load stored investigation for ${caseId}`);
+      return;
+    }
+
+    const storedAnalysis = {
+      email: {
+        subject: fullCase.subject,
+        sender: fullCase.sender,
+        recipient: fullCase.recipient,
+        date: fullCase.receivedAt,
+        headers: fullCase.headers,
+        attachments: fullCase.attachmentFindings || [],
+        filename: fullCase.originalFilename,
+        rawSnippet: fullCase.headers 
+          ? Object.entries(fullCase.headers).map(([k, v]) => `${k}: ${v}`).join('\n') 
+          : `From: ${fullCase.sender}\nTo: ${fullCase.recipient}\nSubject: ${fullCase.subject}`
+      },
+      emailAuth: fullCase.authenticationResults,
+      iocs: fullCase.iocs || [],
+      aiThreat: {
+        phishingProbability: fullCase.phishingProbability,
+        legitimateProbability: fullCase.legitimateProbability,
+        confidence: fullCase.confidence,
+        isMlAvailable: typeof fullCase.phishingProbability === 'number',
+        model: 'TF-IDF + Logistic Regression'
+      },
+      geoInfo: fullCase.geoIntelligence?.geoInfo || null,
+      geoList: fullCase.geoIntelligence?.geoList || [],
+      fusion: fullCase.evidenceFusion || {
+        threatScore: fullCase.threatScore,
+        riskLevel: (fullCase.priority || '').toUpperCase() === 'CRITICAL' ? 'CRITICAL' : (fullCase.priority || '').toUpperCase() === 'HIGH' ? 'HIGH' : 'LOW',
+        verifiedReasons: [fullCase.riskSummary]
+      },
+      campaign: fullCase.forensicMetadata?.campaign || null,
+      caseItem: {
+        caseId: fullCase.caseId,
+        status: fullCase.status,
+        priority: fullCase.priority,
+        threatScore: fullCase.threatScore,
+        sha256: fullCase.emailHash,
+        isSaved: true
+      },
+      caseId: fullCase.caseId,
+      isSaved: true
+    };
+
+    setCurrentAnalysis(storedAnalysis);
+    setSelectedCase(fullCase);
+    handleViewChange('security-analyzer');
+  }, [handleViewChange]);
 
   const handleStartQuickScan = async (presetOrRaw) => {
     setIsScanModalOpen(false);
@@ -360,8 +453,7 @@ function App() {
   };
 
   const handleSelectCase = (caseItem) => {
-    setSelectedCase(caseItem);
-    handleViewChange('investigation-case');
+    handleOpenCase(caseItem);
   };
 
   const handleUpdateWeights = (newWeights) => {

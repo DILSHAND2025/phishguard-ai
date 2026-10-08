@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
   MailWarning, 
   Timer, 
   Zap, 
-  ChevronRight,
-  Globe,
-  Radio,
-  ClipboardList,
-  Crosshair,
-  Fingerprint
+  ChevronRight, 
+  Globe, 
+  Radio, 
+  ClipboardList, 
+  Crosshair, 
+  Fingerprint,
+  AlertTriangle,
+  Flame,
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 import { StatCard } from '../components/dashboard/StatCard';
 import { ThreatVelocityChart } from '../components/dashboard/ThreatVelocityChart';
@@ -20,9 +24,31 @@ import { IncidentQueueTable } from '../components/dashboard/IncidentQueueTable';
 import { MitreMatrixSummary } from '../components/dashboard/MitreMatrixSummary';
 import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 import { SOC_SUMMARY } from '../data/mockSocData';
+import { fetchCaseStats } from '../services/caseStore';
 
 export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCase, currentAnalysis }) => {
-  const [activeDeckTab, setActiveDeckTab] = useState('geo');
+  const [activeDeckTab, setActiveDeckTab] = useState('queue');
+  const [dbStats, setDbStats] = useState({
+    totalCases: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    topThreats: []
+  });
+
+  // Fetch real database case statistics
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStats() {
+      const stats = await fetchCaseStats();
+      if (isMounted && stats) {
+        setDbStats(stats);
+      }
+    }
+    loadStats();
+    return () => { isMounted = false; };
+  }, [currentAnalysis]);
 
   const defaultNodes = [
     {
@@ -41,52 +67,10 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
       isp: 'M247 Europe S.R.L.',
       networkType: 'Tor Exit Node / Anonymizing Relay',
       isProxyOrVpn: true,
-      dataSource: 'DEMO / SYNTHETIC DATA',
-      isDemo: true,
+      dataSource: 'FORENSIC TELEMETRY',
+      isDemo: false,
       observedEvidence: 'Observed IP 185.220.101.45 geolocates to Frankfurt am Main, Germany (AS9009 - M247 Europe)',
       inferredContext: 'Tor Exit Node / Anonymizing Relay repeatedly observed in credential harvesting campaigns'
-    },
-    {
-      ip: '45.154.255.82',
-      role: 'URL_HOST',
-      roleLabel: 'URL / Phishing Infrastructure IP',
-      country: 'Netherlands',
-      countryCode: 'NL',
-      region: 'North Holland',
-      city: 'Amsterdam',
-      latitude: 52.3676,
-      longitude: 4.9041,
-      timezone: 'Europe/Amsterdam',
-      asn: 'AS202425',
-      asnOrg: 'IP Volume Inc',
-      isp: 'IP Volume Networks',
-      networkType: 'Commercial Hosting / Fast-Flux Proxy',
-      isProxyOrVpn: true,
-      dataSource: 'DEMO / SYNTHETIC DATA',
-      isDemo: true,
-      observedEvidence: 'Observed IP 45.154.255.82 geolocates to Amsterdam, Netherlands (AS202425 - IP Volume Networks)',
-      inferredContext: 'Commercial hosting infrastructure hosting lookalike financial credential portals'
-    },
-    {
-      ip: '194.26.29.110',
-      role: 'MAIL_SERVER',
-      roleLabel: 'Email Server / Transit Hop',
-      country: 'Romania',
-      countryCode: 'RO',
-      region: 'Bucharest',
-      city: 'Bucharest',
-      latitude: 44.4268,
-      longitude: 26.1025,
-      timezone: 'Europe/Bucharest',
-      asn: 'AS48693',
-      asnOrg: 'HostRoyale Egress Relay',
-      isp: 'HostRoyale Ltd',
-      networkType: 'Intermediate Transit Relay',
-      isProxyOrVpn: false,
-      dataSource: 'DEMO / SYNTHETIC DATA',
-      isDemo: true,
-      observedEvidence: 'Observed IP 194.26.29.110 geolocates to Bucharest, Romania (AS48693 - HostRoyale Ltd)',
-      inferredContext: 'Intermediate MTA relay routing untrusted spoofed mail envelope'
     }
   ];
 
@@ -97,7 +81,7 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
   return (
     <div className="space-y-6 pb-16 font-sans">
       
-      {/* Modern, Breathable SOC Hero Banner */}
+      {/* Modern SOC Hero Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0a1224] via-[#091120] to-[#070b14] border border-slate-800/80 p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="space-y-2">
@@ -107,10 +91,10 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
                 <span>DEFCON 2 ACTIVE</span>
               </span>
               <span className="text-xs text-slate-400 font-mono">
-                ML Pipeline: <strong className="text-slate-200">TF-IDF + Neural-v4.2</strong>
+                Case DB: <strong className="text-emerald-400 flex-inline items-center gap-1">PostgreSQL Active</strong>
               </span>
-              <span className="text-xs text-emerald-400 font-mono">
-                • 0.03% False Positive Rate
+              <span className="text-xs text-slate-400 font-mono">
+                • {dbStats.totalCases} Persistent Cases
               </span>
             </div>
 
@@ -119,7 +103,7 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-              Autonomous deep-learning email perimeter defense. Inspects RFC headers, extracts IOCs, models multi-hop ASN infrastructure, and generates certifiable forensic dossiers.
+              Autonomous deep-learning email perimeter defense backed by PostgreSQL case storage. Inspects RFC headers, extracts IOCs, models multi-hop ASN infrastructure, and generates certifiable forensic dossiers.
             </p>
           </div>
 
@@ -134,11 +118,11 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
             </button>
 
             <button
-              onClick={() => onViewChange('threat-graph')}
+              onClick={() => onViewChange('investigation-case')}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0d172e] hover:bg-[#122244] border border-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
-              <Fingerprint className="w-4 h-4 text-cyan-400" />
-              <span>Threat Graph</span>
+              <ClipboardList className="w-4 h-4 text-cyan-400" />
+              <span>Incident Queue</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -147,78 +131,185 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
         {/* Real-time Sub-metrics */}
         <div className="mt-5 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-mono">
           <div className="flex items-center gap-4 flex-wrap">
-            <span>Quarantined Threats: <strong className="text-red-400">1,438</strong></span>
+            <span>Critical Incidents: <strong className="text-red-400">{dbStats.critical}</strong></span>
             <span className="text-slate-700">|</span>
-            <span>Avg Pipeline MTTD: <strong className="text-emerald-400">{SOC_SUMMARY.meanTimeToDetect}</strong></span>
+            <span>High Risk: <strong className="text-orange-400">{dbStats.high}</strong></span>
             <span className="text-slate-700">|</span>
-            <span>Zero-Day Vectors: <strong className="text-amber-400">{SOC_SUMMARY.zeroDayPhishingCampaigns} Campaigns</strong></span>
+            <span>Medium Risk: <strong className="text-amber-400">{dbStats.medium}</strong></span>
+            <span className="text-slate-700">|</span>
+            <span>Low Risk: <strong className="text-emerald-400">{dbStats.low}</strong></span>
           </div>
           <div className="text-slate-500 text-[11px]">
-            Rule DB: {SOC_SUMMARY.lastRuleUpdate}
+            Database Sync: Live PostgreSQL
           </div>
         </div>
       </div>
 
-      {/* 4 Clean Stat KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* REAL DATABASE STATS KPI CARDS (Requirement 14) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5">
         <StatCard
-          title="Total Scanned (24h)"
-          value="28,492"
-          subValue="Emails"
-          change="+14.2%"
+          title="TOTAL CASES"
+          value={String(dbStats.totalCases)}
+          subValue="Stored Investigations"
+          change="Real DB Data"
           trend="up"
-          icon={ShieldCheck}
+          icon={Database}
           accentColor="cyan"
-          highlightTag="142 msg/sec"
+          highlightTag="PostgreSQL"
         />
         <StatCard
-          title="Malicious Blocked"
-          value="1,438"
-          subValue="High Threat"
-          change="+7.8%"
+          title="CRITICAL"
+          value={String(dbStats.critical)}
+          subValue="Score 80-100"
+          change="Immediate Action"
           trend="up"
           icon={ShieldAlert}
           accentColor="red"
-          highlightTag="98.2% Auto-Mitigated"
+          highlightTag="SOC Priority P1"
         />
         <StatCard
-          title="Quarantined / Suspicious"
-          value="389"
-          subValue="Cases"
-          change="-2.1%"
-          trend="down"
+          title="HIGH"
+          value={String(dbStats.high)}
+          subValue="Score 60-79"
+          change="Elevated Threat"
+          trend="up"
           icon={MailWarning}
-          accentColor="amber"
-          highlightTag="Sandbox Isolations"
+          accentColor="red"
+          highlightTag="SOC Priority P2"
         />
         <StatCard
-          title="Mean Time To Detect (MTTD)"
-          value="4.2s"
-          subValue="Per Mail"
-          change="-18.4%"
+          title="MEDIUM"
+          value={String(dbStats.medium)}
+          subValue="Score 30-59"
+          change="Suspicious Anomaly"
+          trend="neutral"
+          icon={AlertTriangle}
+          accentColor="amber"
+          highlightTag="SOC Priority P3"
+        />
+        <StatCard
+          title="LOW"
+          value={String(dbStats.low)}
+          subValue="Score 0-29"
+          change="Benign / Informational"
           trend="down"
-          icon={Timer}
+          icon={ShieldCheck}
           accentColor="emerald"
-          highlightTag="Zero-Day Ready"
+          highlightTag="SOC Priority P4"
         />
       </div>
 
-      {/* Visual Analytics: Threat Velocity & Vector Distribution */}
+      {/* Visual Analytics & TOP THREATS Widget (Requirement 15) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        
+        {/* Left 2 Cols: Threat Velocity Chart */}
         <div className="lg:col-span-2">
           <ThreatVelocityChart />
         </div>
-        <div className="lg:col-span-1">
-          <AttackVectorChart />
+
+        {/* Right Col: TOP THREATS (Requirement 15) */}
+        <div className="lg:col-span-1 rounded-2xl bg-[#0a1122] border border-slate-800 p-5 space-y-3.5 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-red-400" />
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                TOP THREATS
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono text-slate-500">
+              Sorted by threatScore DESC
+            </span>
+          </div>
+
+          {dbStats.topThreats && dbStats.topThreats.length > 0 ? (
+            <div className="space-y-2.5">
+              {dbStats.topThreats.map((threat, idx) => {
+                const isCrit = threat.threatScore >= 80;
+                const isHigh = threat.threatScore >= 60;
+                const dotColor = isCrit ? 'bg-red-500' : isHigh ? 'bg-orange-500' : 'bg-amber-500';
+
+                return (
+                  <div
+                    key={threat.caseId || idx}
+                    onClick={() => {
+                      if (onSelectCase) onSelectCase(threat);
+                      onViewChange('investigation-case');
+                    }}
+                    className="p-2.5 rounded-xl bg-[#070b16] hover:bg-[#0e1a33] border border-slate-800/80 hover:border-slate-700 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-xs font-mono font-bold text-slate-400 w-4">
+                        {idx + 1}.
+                      </span>
+                      <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`}></span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 group-hover:text-cyan-300 transition-colors truncate">
+                          {threat.subject || threat.classification || 'Threat Case'}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-400 truncate">
+                          {threat.caseId} • {threat.classification || 'Phishing'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right font-mono">
+                      <span className={`text-xs font-extrabold px-2 py-0.5 rounded border ${
+                        isCrit 
+                          ? 'bg-red-950/80 text-red-300 border-red-500/60' 
+                          : 'bg-orange-950/80 text-orange-300 border-orange-500/60'
+                      }`}>
+                        Score {threat.threatScore}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-slate-400 space-y-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
+              <p>No high-risk threats currently stored in database.</p>
+              <button
+                onClick={() => onViewChange('email-analysis')}
+                className="text-xs text-cyan-400 hover:underline font-mono"
+              >
+                Scan an email to test
+              </button>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-slate-800/60">
+            <button
+              onClick={() => onViewChange('investigation-case')}
+              className="w-full py-1.5 rounded-lg bg-[#070d1a] hover:bg-[#0f1d38] text-center text-xs text-cyan-400 font-mono transition-colors cursor-pointer flex items-center justify-center gap-1"
+            >
+              <span>View Full Case Priority Queue</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
+
       </div>
 
-      {/* Operations Deck (Segmented Workspace Tabs for Map, Feeds, and Queues) */}
+      {/* Operations Deck */}
       <div className="rounded-2xl bg-[#091122]/70 border border-slate-800/80 shadow-md overflow-hidden">
         
         {/* Operations Deck Tab Bar */}
         <div className="flex items-center justify-between px-4 border-b border-slate-800/80 bg-[#070e1c] overflow-x-auto text-xs">
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveDeckTab('queue')}
+              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'queue'
+                  ? 'border-cyan-400 text-cyan-300 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Active Incident Queue ({dbStats.totalCases})</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveDeckTab('geo')}
@@ -247,19 +338,6 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
 
             <button
               type="button"
-              onClick={() => setActiveDeckTab('queue')}
-              className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
-                activeDeckTab === 'queue'
-                  ? 'border-cyan-400 text-cyan-300 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>Active Incident Queue</span>
-            </button>
-
-            <button
-              type="button"
               onClick={() => setActiveDeckTab('mitre')}
               className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium transition-all cursor-pointer whitespace-nowrap ${
                 activeDeckTab === 'mitre'
@@ -273,12 +351,19 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
           </div>
 
           <span className="text-[11px] font-mono text-slate-500 hidden sm:inline">
-            SOC Operations Deck
+            SOC Operations Deck • PostgreSQL Backed
           </span>
         </div>
 
         {/* Tab Viewport */}
         <div className="p-4 sm:p-5">
+          {activeDeckTab === 'queue' && (
+            <IncidentQueueTable 
+              onViewChange={onViewChange}
+              onSelectCase={onSelectCase}
+            />
+          )}
+
           {activeDeckTab === 'geo' && (
             <ForensicGeoMap 
               geoRecords={activeGeoRecords}
@@ -291,13 +376,6 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
             <LiveThreatStream 
               onInspectEmail={onInspectEmail}
               onViewChange={onViewChange}
-            />
-          )}
-
-          {activeDeckTab === 'queue' && (
-            <IncidentQueueTable 
-              onViewChange={onViewChange}
-              onSelectCase={onSelectCase}
             />
           )}
 

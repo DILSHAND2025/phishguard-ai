@@ -286,22 +286,34 @@ export function generateAdvisoryRecommendations({
  */
 export async function buildForensicReport(analysisResult, options = {}) {
   const safeAnalysis = analysisResult || {};
-  const email = safeAnalysis.email || {};
-  const aiThreat = safeAnalysis.aiThreat || {};
-  const fusion = safeAnalysis.fusion || {};
-  const emailAuth = safeAnalysis.emailAuth || email.emailAuth || {};
-  const geoInfo = safeAnalysis.geoInfo || null;
-  const geoList = safeAnalysis.geoList || (geoInfo ? [geoInfo] : []);
+  const email = safeAnalysis.email || {
+    subject: safeAnalysis.subject || '(No Subject)',
+    sender: safeAnalysis.sender || 'unknown@sender.local',
+    recipient: safeAnalysis.recipient || 'unknown@recipient.local',
+    date: safeAnalysis.receivedAt || safeAnalysis.createdAt,
+    headers: safeAnalysis.headers || null
+  };
+  const aiThreat = safeAnalysis.aiThreat || {
+    phishingProbability: safeAnalysis.phishingProbability,
+    legitimateProbability: safeAnalysis.legitimateProbability,
+    confidence: safeAnalysis.confidence
+  };
+  const fusion = safeAnalysis.fusion || safeAnalysis.evidenceFusion || {};
+  const emailAuth = safeAnalysis.emailAuth || safeAnalysis.authenticationResults || email.emailAuth || {};
+  const geoInfo = safeAnalysis.geoInfo || safeAnalysis.geoIntelligence?.geoInfo || null;
+  const geoList = safeAnalysis.geoList || safeAnalysis.geoIntelligence?.geoList || (geoInfo ? [geoInfo] : []);
   const iocs = safeAnalysis.iocs || [];
-  const attachments = email.attachments || [];
-  const campaign = safeAnalysis.campaign || null;
+  const attachments = email.attachments || safeAnalysis.attachmentFindings || [];
+  const campaign = safeAnalysis.campaign || safeAnalysis.forensicMetadata?.campaign || null;
   const caseItem = safeAnalysis.caseItem || null;
 
   // Case ID resolution
-  const caseId = options.caseId || generateCaseId(caseItem?.caseId || email.messageId || Date.now().toString());
+  const caseId = options.caseId || safeAnalysis.caseId || generateCaseId(caseItem?.caseId || email.messageId || Date.now().toString());
 
   const generatedAt = options.generatedAt || new Date().toISOString();
-  const threatScore = typeof fusion.threatScore === 'number' ? fusion.threatScore : 0;
+  const threatScore = typeof fusion.threatScore === 'number' 
+    ? fusion.threatScore 
+    : (typeof safeAnalysis.threatScore === 'number' ? safeAnalysis.threatScore : 0);
   const riskLevel = fusion.riskLevel || (threatScore >= 80 ? 'CRITICAL' : threatScore >= 60 ? 'HIGH' : threatScore >= 30 ? 'SUSPICIOUS' : 'LOW');
 
   // Executive Summary

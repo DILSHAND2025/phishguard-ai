@@ -180,12 +180,19 @@ export const SecurityAnalyzerPage = ({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-mono text-slate-400">
-            <span>Case ID: <strong className="text-slate-200">{caseId}</strong></span>
+            <span>Case ID: <strong className="text-cyan-300">{caseId}</strong></span>
             <span>•</span>
-            <span className="text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              Status: Analysis Complete
-            </span>
+            {currentAnalysis.isSaved ? (
+              <span className="text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Saved in PostgreSQL
+              </span>
+            ) : (
+              <span className="text-amber-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                In-Memory Session
+              </span>
+            )}
           </div>
         </div>
 
@@ -210,6 +217,18 @@ export const SecurityAnalyzerPage = ({
           </button>
         </div>
       </div>
+
+      {/* Database Persistence Failure Alert (Requirement 19) */}
+      {currentAnalysis.dbSaveError && (
+        <div className="rounded-xl bg-amber-950/40 border border-amber-500/50 p-4 text-xs text-amber-200 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-semibold text-amber-100">Persistence Notice</div>
+            <p>Analysis completed, but the case could not be saved. Please retry saving the case.</p>
+            <p className="text-[11px] text-amber-400/80 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================
           SECTION 1: THREAT SUMMARY (EXACTLY FOUR CARDS)
