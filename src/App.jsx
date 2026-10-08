@@ -567,7 +567,7 @@ function App() {
   const isUserEmailView = currentView === 'email-analysis';
 
   return (
-    <div className="min-h-screen bg-[#070b13] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-900">
       
       {/* Top Navbar */}
       <Navbar
@@ -597,8 +597,8 @@ function App() {
         {/* Dynamic Page Content Viewport */}
         <main className={`flex-1 overflow-y-auto ${
           isUserEmailView 
-            ? 'p-4 sm:p-6 lg:p-8 bg-[#070b13]' 
-            : 'p-4 sm:p-6 lg:p-8 bg-[#070b13]'
+            ? 'p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]' 
+            : 'p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]'
         }`}>
           <div className={isUserEmailView ? 'max-w-4xl mx-auto' : 'max-w-[1600px] mx-auto'}>
             {renderCurrentView()}

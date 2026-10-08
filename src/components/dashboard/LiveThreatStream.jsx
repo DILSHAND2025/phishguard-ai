@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
 import { 
-  Radio, 
   ExternalLink, 
-  ShieldAlert, 
-  ShieldCheck, 
-  AlertTriangle, 
   Filter, 
   Globe, 
-  Mail, 
-  FileCode,
-  ArrowRight,
   Eye
 } from 'lucide-react';
 import { LIVE_THREAT_FEED } from '../../data/mockSocData';
@@ -26,11 +19,11 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
 
   const getScoreBadge = (score) => {
     if (score >= 90) {
-      return 'bg-red-500/20 text-red-400 border-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.3)]';
+      return 'bg-red-50 text-red-700 border-red-200';
     } else if (score >= 60) {
-      return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
+      return 'bg-orange-50 text-orange-700 border-orange-200';
     } else {
-      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
   };
 
@@ -39,39 +32,39 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
       case 'QUARANTINED':
       case 'BLOCKED':
       case 'PURGED & ISOLATED':
-        return 'bg-red-950/80 text-red-300 border-red-500/40';
+        return 'bg-red-50 text-red-700 border-red-200';
       case 'DELIVERED':
-        return 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       default:
-        return 'bg-amber-950/80 text-amber-300 border-amber-500/40';
+        return 'bg-amber-50 text-amber-800 border-amber-200';
     }
   };
 
   return (
-    <div className="rounded-xl bg-gradient-to-b from-[#0c1424] to-[#070b14] border border-slate-800/80 p-5 shadow-lg">
+    <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs font-sans">
       
       {/* Feed Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
             </span>
-            <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-100">
-              Live Intercepted Threat Stream
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              Live Threat Stream
             </h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/30 text-cyan-300">
-              Auto-Correlating
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700">
+              Correlating
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Real-time mail ingestion, header anomaly detection, and AI forensic score
           </p>
         </div>
 
         {/* Filter buttons */}
-        <div className="flex items-center gap-1 bg-[#090f1d] p-1 rounded-lg border border-slate-800 text-xs font-mono">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
           <Filter className="w-3.5 h-3.5 text-slate-500 ml-1 mr-1" />
           {[
             { id: 'all', label: 'All (6)' },
@@ -82,10 +75,10 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
             <button
               key={btn.id}
               onClick={() => setFilterSeverity(btn.id)}
-              className={`px-2 py-1 rounded text-[11px] transition-all ${
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
                 filterSeverity === btn.id
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {btn.label}
@@ -99,7 +92,7 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
         {filteredFeed.map((item) => (
           <div
             key={item.id}
-            className="group relative rounded-lg bg-[#091122]/90 hover:bg-[#0c1830] border border-slate-800/90 hover:border-cyan-500/40 p-3.5 transition-all duration-200"
+            className="group relative rounded-lg bg-white hover:bg-slate-50/70 border border-slate-200 p-3.5 transition-colors shadow-2xs"
           >
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               
@@ -107,7 +100,7 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
               <div className="flex items-start gap-3 min-w-0">
                 
                 {/* Score Pill */}
-                <div className={`flex flex-col items-center justify-center w-13 h-13 rounded-lg border font-mono shrink-0 ${getScoreBadge(item.riskScore)}`}>
+                <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg border shrink-0 ${getScoreBadge(item.riskScore)}`}>
                   <span className="text-base font-extrabold leading-none">
                     {item.riskScore}
                   </span>
@@ -119,44 +112,44 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
                 {/* Sender & Subject details */}
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                       {item.timestamp}
                     </span>
-                    <span className="text-xs font-mono font-semibold text-slate-200 truncate max-w-xs">
+                    <span className="text-xs font-semibold text-slate-900 truncate max-w-xs">
                       {item.displaySender}
                     </span>
-                    <span className="text-xs text-slate-500">→</span>
-                    <span className="text-xs font-mono text-slate-400 truncate max-w-[180px]">
+                    <span className="text-xs text-slate-400">→</span>
+                    <span className="text-xs text-slate-600 truncate max-w-[180px]">
                       {item.recipient}
                     </span>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${getStatusBadge(item.status)}`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getStatusBadge(item.status)}`}>
                       {item.status}
                     </span>
                   </div>
 
-                  <div className="text-xs font-medium text-slate-200 group-hover:text-cyan-200 transition-colors truncate">
+                  <div className="text-xs font-medium text-slate-800 truncate">
                     {item.subject}
                   </div>
 
                   {/* Indicators and auth status tags */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-medium">
                       {item.threatCategory}
                     </span>
                     
-                    <span className={`text-[10px] font-mono px-1 py-0.2 rounded ${
-                      item.spf === 'PASS' ? 'text-emerald-400 bg-emerald-950/40' : 'text-red-400 bg-red-950/40'
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
+                      item.spf === 'PASS' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-red-700 bg-red-50 border-red-200'
                     }`}>
                       SPF: {item.spf}
                     </span>
-                    <span className={`text-[10px] font-mono px-1 py-0.2 rounded ${
-                      item.dmarc === 'PASS' ? 'text-emerald-400 bg-emerald-950/40' : 'text-red-400 bg-red-950/40'
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
+                      item.dmarc === 'PASS' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-red-700 bg-red-50 border-red-200'
                     }`}>
                       DMARC: {item.dmarc}
                     </span>
 
-                    <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-                      <Globe className="w-3 h-3 text-slate-500" />
+                    <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
+                      <Globe className="w-3 h-3 text-slate-400" />
                       {item.ipOrigin} [{item.country}]
                     </span>
                   </div>
@@ -171,18 +164,18 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
                     if (onInspectEmail) onInspectEmail(item);
                     if (onViewChange) onViewChange('analysis-results');
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0e1b33] hover:bg-cyan-950/80 border border-cyan-500/30 hover:border-cyan-400 text-xs font-mono text-cyan-300 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                 >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Forensic Verdict</span>
+                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                  <span>View Details</span>
                 </button>
 
                 <button
                   onClick={() => {
                     if (onViewChange) onViewChange('threat-graph');
                   }}
-                  title="View Threat Infrastructure Graph"
-                  className="p-1.5 rounded-lg bg-[#0e1b33] hover:bg-[#122444] border border-slate-800 text-slate-400 hover:text-cyan-300 transition-all"
+                  title="View Threat Graph"
+                  className="p-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer shadow-2xs"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
@@ -191,17 +184,17 @@ export const LiveThreatStream = ({ onInspectEmail, onViewChange }) => {
             </div>
 
             {/* Expandable Malicious Indicators */}
-            {item.maliciousIndicators.length > 0 && (
-              <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-mono uppercase text-slate-500">
-                  AI IOC Flags:
+            {item.maliciousIndicators && item.maliciousIndicators.length > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] uppercase font-semibold text-slate-400">
+                  Flags:
                 </span>
                 {item.maliciousIndicators.map((flag, idx) => (
                   <span
                     key={idx}
-                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-950/40 border border-red-500/30 text-red-300 flex items-center gap-1"
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-700 flex items-center gap-1 font-medium"
                   >
-                    <span className="w-1 h-1 rounded-full bg-red-400"></span>
+                    <span className="w-1 h-1 rounded-full bg-red-500"></span>
                     {flag}
                   </span>
                 ))}

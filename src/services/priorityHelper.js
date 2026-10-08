@@ -35,43 +35,43 @@ export function getPriorityStyle(priority) {
     case 'critical':
       return {
         label: 'CRITICAL',
-        badge: 'bg-red-950/80 text-red-300 border-red-500/60 font-bold',
-        text: 'text-red-400',
-        border: 'border-red-500/60',
+        badge: 'bg-red-50 text-red-700 border-red-200 font-bold',
+        text: 'text-red-600',
+        border: 'border-red-200',
         dot: 'bg-red-500',
-        pill: 'bg-red-500/10 text-red-400 border border-red-500/40',
-        rowHighlight: 'hover:bg-red-950/20'
+        pill: 'bg-red-50 text-red-700 border border-red-200',
+        rowHighlight: 'hover:bg-red-50/40'
       };
     case 'high':
       return {
         label: 'HIGH',
-        badge: 'bg-orange-950/80 text-orange-300 border-orange-500/60 font-semibold',
-        text: 'text-orange-400',
-        border: 'border-orange-500/60',
+        badge: 'bg-orange-50 text-orange-700 border-orange-200 font-semibold',
+        text: 'text-orange-600',
+        border: 'border-orange-200',
         dot: 'bg-orange-500',
-        pill: 'bg-orange-500/10 text-orange-400 border border-orange-500/40',
-        rowHighlight: 'hover:bg-orange-950/20'
+        pill: 'bg-orange-50 text-orange-700 border border-orange-200',
+        rowHighlight: 'hover:bg-orange-50/40'
       };
     case 'medium':
       return {
         label: 'MEDIUM',
-        badge: 'bg-amber-950/80 text-amber-300 border-amber-500/60 font-medium',
-        text: 'text-amber-400',
-        border: 'border-amber-500/60',
-        dot: 'bg-amber-400',
-        pill: 'bg-amber-500/10 text-amber-400 border border-amber-500/40',
-        rowHighlight: 'hover:bg-amber-950/20'
+        badge: 'bg-amber-50 text-amber-700 border-amber-200 font-medium',
+        text: 'text-amber-600',
+        border: 'border-amber-200',
+        dot: 'bg-amber-500',
+        pill: 'bg-amber-50 text-amber-700 border border-amber-200',
+        rowHighlight: 'hover:bg-amber-50/40'
       };
     case 'low':
     default:
       return {
         label: 'LOW',
-        badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60 font-medium',
-        text: 'text-emerald-400',
-        border: 'border-emerald-500/60',
-        dot: 'bg-emerald-400',
-        pill: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/40',
-        rowHighlight: 'hover:bg-emerald-950/20'
+        badge: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-medium',
+        text: 'text-emerald-600',
+        border: 'border-emerald-200',
+        dot: 'bg-emerald-500',
+        pill: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+        rowHighlight: 'hover:bg-emerald-50/40'
       };
   }
 }

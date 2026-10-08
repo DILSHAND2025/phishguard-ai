@@ -35,7 +35,7 @@ export const LoginPage = ({ onLoginSuccess }) => {
           if (googleButtonRef.current) {
             try {
               window.google.accounts.id.renderButton(googleButtonRef.current, {
-                theme: 'filled_black',
+                theme: 'outline',
                 size: 'large',
                 text: 'signin_with',
                 shape: 'rectangular',
@@ -97,40 +97,40 @@ export const LoginPage = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0d0f] bg-gradient-to-b from-[#0b0d0f] to-[#101317] text-white flex flex-col items-center justify-center p-4 font-sans selection:bg-cyan-500/20 selection:text-cyan-200">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col items-center justify-center p-4 font-sans">
       
       {/* Brand Header */}
-      <div className="flex flex-col items-center mb-5 text-center">
-        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#14171f] border border-white/[0.08] shadow-sm mb-2.5">
-          <Shield className="w-5 h-5 text-cyan-400" />
+      <div className="flex flex-col items-center mb-6 text-center">
+        <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-2xs mb-3">
+          <Shield className="w-6 h-6 text-slate-800" />
         </div>
         
-        <h1 className="text-xl font-bold tracking-tight text-white">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           MAVERICK
         </h1>
         
-        <p className="text-xs text-zinc-400 mt-1 leading-relaxed text-center max-w-[280px]">
-          AI-Powered Email Threat Detection<br />& Forensic Intelligence
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed text-center max-w-[280px]">
+          AI-Powered Email Threat Detection & Forensic Intelligence
         </p>
       </div>
 
       {/* Centered Login Card */}
-      <div className="w-full max-w-[380px] rounded-xl bg-[#13161c] border border-white/[0.08] shadow-lg shadow-black/25 p-6 sm:p-7 space-y-5">
+      <div className="w-full max-w-[380px] rounded-xl bg-white border border-slate-200 shadow-xs p-6 sm:p-7 space-y-5">
         
         {/* Card Header */}
         <div className="text-center space-y-1">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-bold text-slate-900">
             Welcome
           </h2>
-          <p className="text-xs text-zinc-400 leading-normal">
-            Secure access to your forensic intelligence workspace.
+          <p className="text-xs text-slate-500 leading-normal">
+            Secure access to your forensic security dashboard.
           </p>
         </div>
 
         {/* Error Alert Box */}
         {errorMsg && (
-          <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-500/30 flex items-start gap-2 text-xs text-red-300">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2 text-xs text-red-700">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
         )}
@@ -147,11 +147,11 @@ export const LoginPage = ({ onLoginSuccess }) => {
             id="btn-google-login"
             onClick={handleGoogleSignInClick}
             disabled={isLoading}
-            className="w-full h-[48px] rounded-[10px] bg-white hover:bg-zinc-100 active:bg-zinc-200 text-zinc-900 text-sm font-medium flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-70 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:ring-offset-2 focus:ring-offset-[#13161c]"
+            className="w-full h-[46px] rounded-lg bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold flex items-center justify-center gap-3 transition-colors cursor-pointer disabled:opacity-70 shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-400"
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin text-zinc-700" />
+                <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
                 <span>Signing in with Google...</span>
               </>
             ) : (
@@ -182,8 +182,8 @@ export const LoginPage = ({ onLoginSuccess }) => {
 
           {/* Security Notice */}
           <div className="pt-1 text-center">
-            <p className="text-xs text-zinc-400 flex items-center justify-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>Secure authentication powered by Google</span>
             </p>
           </div>

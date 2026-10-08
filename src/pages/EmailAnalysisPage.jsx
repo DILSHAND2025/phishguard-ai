@@ -8,7 +8,8 @@ import {
   ArrowRight, 
   Trash2, 
   Loader2, 
-  RefreshCw
+  RefreshCw,
+  FileText
 } from 'lucide-react';
 import { buildForensicReport } from '../services/forensicReportService';
 import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilder';
@@ -191,23 +192,28 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
   const score = currentAnalysis?.fusion?.threatScore ?? 0;
   const rawRisk = (currentAnalysis?.fusion?.riskLevel || 'LOW').toUpperCase();
   const caseId = currentAnalysis?.caseItem?.caseId || currentAnalysis?.caseId || 'MAV-2026-00000000';
+  const classification = currentAnalysis?.aiThreat?.classification || currentAnalysis?.classification || (score >= 80 ? 'Credential Phishing' : score >= 60 ? 'Suspicious Impersonation' : score >= 30 ? 'Suspicious Email' : 'Legitimate Communication');
 
-  // Format risk level display
-  let riskBadgeColor = 'bg-emerald-950/70 border-emerald-500/50 text-emerald-400';
-  let riskLabel = 'LOW RISK';
+  // Format risk level display with clean light-theme badges
+  let riskBadgeColor = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+  let riskDotColor = 'bg-emerald-500';
+  let riskLabel = 'LOW';
   let threatNarrative = 'No significant security threats were detected. The email appears consistent with safe communication.';
 
   if (rawRisk === 'CRITICAL' || score >= 80) {
-    riskBadgeColor = 'bg-red-950/70 border-red-500/60 text-red-400';
-    riskLabel = 'CRITICAL THREAT';
-    threatNarrative = 'MAVERICK detected multiple critical attack vectors. Do not interact with this email.';
+    riskBadgeColor = 'bg-red-50 border-red-200 text-red-700';
+    riskDotColor = 'bg-red-500';
+    riskLabel = 'CRITICAL';
+    threatNarrative = 'MAVERICK detected critical attack vectors. High confidence malicious indicators identified.';
   } else if (rawRisk === 'HIGH' || score >= 60) {
-    riskBadgeColor = 'bg-red-950/70 border-red-500/50 text-red-400';
-    riskLabel = 'HIGH RISK';
+    riskBadgeColor = 'bg-orange-50 border-orange-200 text-orange-700';
+    riskDotColor = 'bg-orange-500';
+    riskLabel = 'HIGH';
     threatNarrative = 'MAVERICK detected multiple suspicious indicators. Caution is strongly advised.';
-  } else if (rawRisk === 'SUSPICIOUS' || score >= 30) {
-    riskBadgeColor = 'bg-amber-950/70 border-amber-500/50 text-amber-400';
-    riskLabel = 'SUSPICIOUS';
+  } else if (rawRisk === 'SUSPICIOUS' || rawRisk === 'MEDIUM' || score >= 30) {
+    riskBadgeColor = 'bg-amber-50 border-amber-200 text-amber-800';
+    riskDotColor = 'bg-amber-500';
+    riskLabel = 'MEDIUM';
     threatNarrative = 'MAVERICK detected anomalies in sender authentication or link structure.';
   }
 
@@ -283,21 +289,21 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
 
       {/* 1. LOADING STATE */}
       {analysisStatus === 'analyzing' && (
-        <div className="rounded-2xl bg-[#090e1b] border border-slate-800 p-8 sm:p-12 text-center space-y-6 shadow-2xl">
+        <div className="rounded-xl bg-white border border-slate-200 p-8 sm:p-12 text-center space-y-6 shadow-xs">
           <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin"></div>
-            <ShieldCheck className="w-8 h-8 text-cyan-400" />
+            <div className="absolute inset-0 rounded-full border-3 border-slate-200 border-t-slate-800 animate-spin"></div>
+            <ShieldCheck className="w-8 h-8 text-slate-800" />
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-white tracking-wide">Analyzing your email...</h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Analyzing your email...</h2>
+            <p className="text-xs text-slate-500 mt-1">
               Executing multi-layer threat detection and forensic verification
             </p>
           </div>
 
           {/* Staged Checklist */}
-          <div className="max-w-sm mx-auto space-y-2 text-left pt-2">
+          <div className="max-w-sm mx-auto space-y-2.5 text-left pt-2">
             {ANALYSIS_STEPS.map((step, idx) => {
               const isDone = currentStepIndex > idx;
               const isCurrent = currentStepIndex === idx;
@@ -305,18 +311,18 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
               return (
                 <div key={step.id} className="flex items-center gap-3 text-xs">
                   {isDone ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   ) : isCurrent ? (
                     <span className="w-4 h-4 flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                      <span className="w-2 h-2 rounded-full bg-slate-900 animate-ping"></span>
                     </span>
                   ) : (
                     <span className="w-4 h-4 flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-slate-700"></span>
+                      <span className="w-2 h-2 rounded-full bg-slate-300"></span>
                     </span>
                   )}
                   <span className={`transition-colors ${
-                    isDone ? 'text-slate-200' : isCurrent ? 'text-cyan-300 font-semibold' : 'text-slate-500'
+                    isDone ? 'text-slate-800 font-medium' : isCurrent ? 'text-slate-900 font-bold' : 'text-slate-400'
                   }`}>
                     {step.label}
                   </span>
@@ -332,13 +338,13 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
         <div className="space-y-6">
           
           {/* Result Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Email Security Result</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs font-mono text-slate-400">Case ID: <strong className="text-cyan-300">{caseId}</strong></span>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Email Security Result</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs font-mono text-slate-500">Case ID: <strong className="text-slate-800 font-semibold">{caseId}</strong></span>
                 {currentAnalysis.isSaved ? (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/50 text-emerald-300">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium">
                     Saved to Database
                   </span>
                 ) : null}
@@ -347,52 +353,60 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
 
             <button
               onClick={handleResetForNewAnalysis}
-              className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition-colors cursor-pointer"
+              className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors shadow-2xs cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
               <span>Check Another Email</span>
             </button>
           </div>
 
-          {/* Database Persistence Failure Alert (Requirement 19) */}
+          {/* Database Persistence Failure Alert */}
           {currentAnalysis.dbSaveError && (
-            <div className="rounded-xl bg-amber-950/40 border border-amber-500/50 p-4 text-xs text-amber-200 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <div className="font-semibold text-amber-100">Persistence Notice</div>
-                <p>Analysis completed, but the case could not be saved. Please retry saving the case.</p>
-                <p className="text-[11px] text-amber-400/80 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
+                <div className="font-semibold text-amber-900">Persistence Notice</div>
+                <p>Analysis completed, but the case could not be saved to PostgreSQL.</p>
+                <p className="text-[11px] text-amber-700 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
               </div>
             </div>
           )}
 
           {/* Main Threat Card */}
-          <div className="rounded-2xl bg-[#090d16] border border-slate-800 p-6 sm:p-8 space-y-6 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+          <div className="rounded-xl bg-white border border-slate-200 p-6 sm:p-8 space-y-6 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                   THREAT ASSESSMENT
                 </span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
+                <div className="flex items-baseline gap-2 mt-1.5">
+                  <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
                     {score}
                   </span>
-                  <span className="text-slate-400 text-base font-semibold">/ 100</span>
+                  <span className="text-slate-400 text-lg font-medium">/ 100</span>
                 </div>
               </div>
 
-              <div className={`px-4 py-2 rounded-xl border font-bold text-sm tracking-wider self-start sm:self-auto ${riskBadgeColor}`}>
-                {riskLabel}
+              <div className="flex flex-col sm:items-end gap-1.5">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold tracking-wide uppercase ${riskBadgeColor}`}>
+                  <span className={`w-2 h-2 rounded-full ${riskDotColor}`}></span>
+                  <span>{riskLabel}</span>
+                </div>
+                <div className="text-xs font-medium text-slate-600">
+                  Classification: <strong className="text-slate-900 font-semibold">{classification}</strong>
+                </div>
               </div>
             </div>
 
-            <p className="text-sm text-slate-300 leading-relaxed">
-              {threatNarrative}
-            </p>
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+              <p className="text-sm text-slate-700 leading-relaxed font-normal">
+                {threatNarrative}
+              </p>
+            </div>
 
             {/* Why was it flagged? */}
-            <div className="space-y-3 pt-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <div className="space-y-3 pt-1">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Why was this email flagged?
               </h3>
 
@@ -401,45 +415,53 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                   {flaggedReasons.map((reason, idx) => (
                     <div 
                       key={idx} 
-                      className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/90 flex items-start gap-3"
+                      className="p-3.5 rounded-lg bg-white border border-slate-200 flex items-start gap-3 shadow-2xs"
                     >
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-xs font-semibold text-slate-200">{reason.title}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">{reason.detail}</div>
+                        <div className="text-xs font-semibold text-slate-900">{reason.title}</div>
+                        <div className="text-xs text-slate-600 mt-0.5">{reason.detail}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-300 flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>No suspicious indicators detected. Email conforms to expected legitimate standards.</span>
                 </div>
               )}
             </div>
 
-            {/* Actions: View Detailed Analysis & Download Report */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-slate-800/80">
+            {/* Action buttons as specified */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-slate-100">
               <button
                 onClick={() => onViewChange('security-analyzer')}
-                className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
               >
-                <span>View Detailed Analysis</span>
+                <span>View Full Investigation</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => onViewChange('reports')}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span>View Forensic Report</span>
               </button>
 
               <button
                 onClick={handleDownloadReport}
                 disabled={isDownloadingPdf}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
               >
                 {isDownloadingPdf ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
                 ) : (
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4 text-slate-500" />
                 )}
-                <span>Download Report</span>
+                <span>Export PDF</span>
               </button>
             </div>
 
@@ -450,34 +472,34 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
 
       {/* 3. INPUT / UPLOAD FORM (IDLE STATE) */}
       {analysisStatus === 'idle' && (
-        <div className="space-y-8">
+        <div className="space-y-6">
           
-          {/* Welcome Section */}
+          {/* Welcome Header */}
           <div className="text-center space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
               Analyze a Suspicious Email
             </h1>
-            <p className="text-sm text-slate-400 max-w-lg mx-auto">
-              Upload the suspicious email and MAVERICK will analyze it for phishing and other security indicators.
+            <p className="text-sm text-slate-500 max-w-lg mx-auto">
+              Upload an RFC 822 .EML message for automated forensics, AI classification, and multi-protocol verification.
             </p>
-            <div className="text-xs text-cyan-400/90 pt-1 font-medium tracking-wide">
-              AI Detection • Network Intelligence • Email Authentication
-            </div>
           </div>
 
           {/* Primary Upload Card */}
-          <div className="rounded-2xl bg-[#090d16] border border-slate-800 p-6 sm:p-8 space-y-5 shadow-xl">
-            <div>
-              <h2 className="text-base font-bold text-white">Analyze Email</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Upload the original .EML file for analysis
-              </p>
+          <div className="rounded-xl bg-white border border-slate-200 p-6 sm:p-8 space-y-5 shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Upload .EML</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Select or drag-and-drop the raw message export
+                </p>
+              </div>
+              <span className="text-xs font-medium text-slate-400">Max size 10 MB</span>
             </div>
 
             {/* Error banner if any */}
             {fileError && (
-              <div className="p-3 rounded-lg bg-red-950/40 border border-red-500/40 text-xs text-red-300 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+              <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
                 <span>{fileError}</span>
               </div>
             )}
@@ -489,37 +511,37 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-colors cursor-pointer ${
+                className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-all cursor-pointer ${
                   isDragOver 
-                    ? 'border-cyan-500 bg-cyan-950/20' 
-                    : 'border-slate-700/80 hover:border-slate-600 bg-slate-900/40'
+                    ? 'border-slate-800 bg-slate-50' 
+                    : 'border-slate-300 hover:border-slate-400 bg-slate-50/50 hover:bg-slate-50'
                 }`}
               >
-                <div className="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-cyan-400 mb-3">
+                <div className="w-12 h-12 mx-auto rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-700 mb-3 shadow-2xs">
                   <UploadCloud className="w-6 h-6" />
                 </div>
-                <div className="text-sm font-semibold text-slate-200">
-                  Drop your .EML file here
+                <div className="text-sm font-semibold text-slate-800">
+                  Drag & Drop .EML file here
                 </div>
                 <div className="text-xs text-slate-400 mt-1">or</div>
-                <div className="mt-2 inline-block px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700">
-                  Browse Files
+                <div className="mt-3 inline-block px-4 py-2 rounded-lg bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 border border-slate-200 shadow-2xs transition-colors">
+                  Browse File
                 </div>
-                <div className="text-[11px] text-slate-500 mt-3">
-                  Maximum file size: 10 MB
+                <div className="text-[11px] text-slate-400 mt-3">
+                  Supports RFC 822 format (.eml, .msg, .txt)
                 </div>
               </div>
             ) : (
               /* Uploaded File State */
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-700/80 flex items-center justify-between gap-3">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-950/80 border border-emerald-600/40 text-emerald-400 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-white truncate">{selectedFile.name}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {selectedFile.size} • <span className="text-emerald-400">Email file ready for analysis</span>
+                    <div className="text-xs font-semibold text-slate-900 truncate">{selectedFile.name}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      {selectedFile.size} • <span className="text-emerald-600 font-medium">Ready for investigation</span>
                     </div>
                   </div>
                 </div>
@@ -527,7 +549,7 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={handleRemoveFile}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-white border border-transparent hover:border-slate-200 transition-colors cursor-pointer"
                     title="Remove file"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -539,7 +561,7 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
             {/* Primary Action Button */}
             <button
               onClick={handleStartAnalysis}
-              className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Analyze Email</span>
               <ArrowRight className="w-4 h-4" />
@@ -547,38 +569,38 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           </div>
 
           {/* Alternative Inputs Section */}
-          <div className="rounded-2xl bg-[#090d16] border border-slate-800/80 p-5 sm:p-6 space-y-4 shadow-sm">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 sm:p-6 space-y-4 shadow-xs">
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Other ways to provide email evidence
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Alternative Ingestion Modes
               </h3>
             </div>
 
             {/* Sub-tabs */}
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <button
                 onClick={() => { setActiveTab('headers'); setFileError(null); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  activeTab === 'headers' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'headers' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                Email Header
+                Email Headers
               </button>
               <button
                 onClick={() => { setActiveTab('url'); setFileError(null); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  activeTab === 'url' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'url' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                URL
+                Suspicious URL
               </button>
               <button
                 onClick={() => { setActiveTab('raw'); setFileError(null); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  activeTab === 'raw' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'raw' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                Raw Email
+                Raw Message
               </button>
             </div>
 
@@ -590,11 +612,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                   onChange={(e) => setHeaderInput(e.target.value)}
                   placeholder="Paste RFC 822 email headers here (Received, From, To, Authentication-Results, etc.)..."
                   rows={4}
-                  className="w-full p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 transition-colors resize-y"
+                  className="w-full p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-colors resize-y"
                 />
                 <button
                   onClick={handleStartAnalysis}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors cursor-pointer"
                 >
                   Analyze Headers
                 </button>
@@ -610,11 +632,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="https://example-suspicious-login.com"
-                    className="flex-1 p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 transition-colors"
+                    className="flex-1 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-colors"
                   />
                   <button
                     onClick={handleStartAnalysis}
-                    className="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors cursor-pointer shrink-0"
+                    className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors cursor-pointer shrink-0"
                   >
                     Analyze URL
                   </button>
@@ -630,11 +652,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                   onChange={(e) => setRawInput(e.target.value)}
                   placeholder="Paste complete raw email RFC 822 payload here..."
                   rows={5}
-                  className="w-full p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 transition-colors resize-y"
+                  className="w-full p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-colors resize-y"
                 />
                 <button
                   onClick={handleStartAnalysis}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors cursor-pointer"
                 >
                   Analyze Raw Email
                 </button>

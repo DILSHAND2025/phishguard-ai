@@ -23,6 +23,12 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       isActive: currentView === 'dashboard'
     },
     { 
+      id: 'email-analysis', 
+      label: 'Email Analyzer', 
+      icon: Mail,
+      isActive: currentView === 'email-analysis'
+    },
+    { 
       id: 'security-analyzer', 
       label: 'Security Analyzer', 
       icon: ShieldCheck,
@@ -40,6 +46,12 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       icon: FileText,
       isActive: currentView === 'forensic-report' || currentView === 'reports'
     },
+    { 
+      id: 'settings', 
+      label: 'Settings', 
+      icon: Settings,
+      isActive: currentView === 'settings'
+    },
   ];
 
   const handleNavClick = (viewId) => {
@@ -50,7 +62,7 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
   return (
     <>
       <aside 
-        className={`w-[230px] shrink-0 flex flex-col justify-between border-r border-slate-800/80 bg-[#090d16] text-slate-300 transition-all duration-200 z-30
+        className={`w-[230px] shrink-0 flex flex-col justify-between border-r border-slate-200 bg-white text-slate-700 transition-all duration-200 z-30
           ${isMobileOpen ? 'fixed inset-y-0 left-0 shadow-2xl flex' : 'hidden md:flex'}`}
         style={{ minHeight: 'calc(100vh - 3.5rem)' }}
       >
@@ -58,14 +70,14 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
         <div className="p-3.5 space-y-4">
           
           {/* Mobile close button */}
-          <div className="flex items-center justify-between md:hidden pb-2 border-b border-slate-800">
+          <div className="flex items-center justify-between md:hidden pb-2 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-cyan-400" />
-              <span className="font-bold text-sm text-white tracking-wide">MAVERICK</span>
+              <Shield className="w-4 h-4 text-cyan-600" />
+              <span className="font-bold text-sm text-slate-900 tracking-wide">MAVERICK</span>
             </div>
             <button 
               onClick={onCloseMobile}
-              className="p-1 rounded text-slate-400 hover:text-white"
+              className="p-1 rounded text-slate-400 hover:text-slate-700"
               aria-label="Close sidebar"
             >
               <X className="w-4 h-4" />
@@ -74,8 +86,8 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
 
           {/* Core Navigation Links */}
           <nav className="space-y-1">
-            <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Workspace
+            <div className="px-2.5 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              Navigation
             </div>
 
             {mainNav.map((item) => {
@@ -86,109 +98,60 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
                   onClick={() => handleNavClick(item.id)}
                   className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
                     item.isActive
-                      ? 'bg-slate-800 text-white font-semibold shadow-xs border border-slate-700/60'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
+                      ? 'bg-cyan-50 text-cyan-800 font-semibold border-l-2 border-cyan-600 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={`w-4 h-4 shrink-0 ${item.isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 shrink-0 ${item.isActive ? 'text-cyan-600' : 'text-slate-400'}`} />
                     <span className="truncate">{item.label}</span>
                   </div>
                   {item.isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-600"></span>
                   )}
                 </button>
               );
             })}
           </nav>
 
-          {/* Quick link to User Email Analysis */}
-          <div className="pt-2">
-            <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Submission Mode
-            </div>
-            <button
-              onClick={() => handleNavClick('email-analysis')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                currentView === 'email-analysis'
-                  ? 'bg-slate-800 text-white font-semibold border border-slate-700/60'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Mail className="w-4 h-4 shrink-0 text-sky-400" />
-                <span className="truncate">Email Analysis</span>
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-950/60 text-sky-300 border border-sky-800/40">
-                User
-              </span>
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-slate-800 my-3"></div>
-
-          {/* Secondary Links: Settings & Profile */}
-          <nav className="space-y-1">
-            <button
-              onClick={() => handleNavClick('settings')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                currentView === 'settings'
-                  ? 'bg-slate-800 text-white font-semibold border border-slate-700/60'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
-              }`}
-            >
-              <Settings className={`w-4 h-4 shrink-0 ${currentView === 'settings' ? 'text-cyan-400' : 'text-slate-400'}`} />
-              <span>Settings</span>
-            </button>
-
-            <button
-              onClick={() => setShowProfileModal(true)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-850/60 transition-colors text-left cursor-pointer"
-            >
-              <User className="w-4 h-4 shrink-0 text-slate-400" />
-              <span>Profile</span>
-            </button>
-          </nav>
-
         </div>
 
         {/* Bottom User Area */}
-        <div className="p-3 border-t border-slate-800/80 bg-[#070b13]">
+        <div className="p-3 border-t border-slate-200 bg-slate-50/70">
           {currentUser ? (
             <div className="space-y-2">
               <div 
                 onClick={() => setShowProfileModal(true)}
-                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer transition-colors"
+                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white cursor-pointer transition-colors border border-transparent hover:border-slate-200 shadow-2xs"
               >
                 {currentUser.picture ? (
                   <img
                     src={currentUser.picture}
                     alt={currentUser.name}
-                    className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
+                    className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-cyan-300 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-cyan-100 border border-cyan-200 flex items-center justify-center text-[10px] font-bold text-cyan-700 shrink-0">
                     {currentUser.name ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'U'}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-slate-200 truncate">{currentUser.name || 'User'}</div>
-                  <div className="text-[10px] text-slate-400 truncate">{currentUser.email || 'Online'}</div>
+                  <div className="text-xs font-medium text-slate-800 truncate">{currentUser.name || 'User'}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{currentUser.email || 'Online'}</div>
                 </div>
               </div>
 
               <button
                 onClick={onLogout}
-                className="w-full py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-red-950/40 border border-slate-800 hover:border-red-900/50 text-[11px] text-slate-400 hover:text-red-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="w-full py-1.5 px-2 rounded-lg bg-white hover:bg-red-50 border border-slate-200 hover:border-red-200 text-[11px] text-slate-600 hover:text-red-600 flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-medium shadow-2xs"
               >
-                <LogOut className="w-3 h-3 text-red-400" />
+                <LogOut className="w-3 h-3 text-red-500" />
                 <span>Sign Out</span>
               </button>
             </div>
           ) : (
-            <div className="text-[10px] text-slate-400 text-center py-1">
-              MAVERICK Security Analyzer
+            <div className="text-[11px] text-slate-500 text-center py-1">
+              MAVERICK SOC Platform
             </div>
           )}
         </div>
@@ -198,22 +161,22 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       {isMobileOpen && (
         <div 
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-black/60 z-20 md:hidden backdrop-blur-xs"
+          className="fixed inset-0 bg-slate-900/40 z-20 md:hidden backdrop-blur-2xs"
         />
       )}
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0b101d] border border-slate-700 rounded-xl max-w-sm w-full p-5 space-y-4 text-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <User className="w-4 h-4 text-cyan-400" />
+        <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-5 space-y-4 text-slate-700 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <User className="w-4 h-4 text-cyan-600" />
                 User Profile
               </h3>
               <button 
                 onClick={() => setShowProfileModal(false)}
-                className="p-1 text-slate-400 hover:text-white"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -221,34 +184,34 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
 
             <div className="flex items-center gap-3">
               {currentUser?.picture ? (
-                <img src={currentUser.picture} alt="" className="w-12 h-12 rounded-full border border-cyan-500/40" />
+                <img src={currentUser.picture} alt="" className="w-12 h-12 rounded-full border border-slate-200" />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-base font-bold text-cyan-300">
+                <div className="w-12 h-12 rounded-full bg-cyan-100 border border-cyan-200 flex items-center justify-center text-base font-bold text-cyan-700">
                   {currentUser?.name ? currentUser.name[0] : 'U'}
                 </div>
               )}
               <div>
-                <div className="font-semibold text-white">{currentUser?.name || 'Security Analyst'}</div>
-                <div className="text-xs text-slate-400">{currentUser?.email || 'analyst@maverick.security'}</div>
-                <div className="text-[10px] text-cyan-400 font-mono mt-0.5">Role: Forensic Investigator</div>
+                <div className="font-semibold text-slate-900">{currentUser?.name || 'Security Analyst'}</div>
+                <div className="text-xs text-slate-500">{currentUser?.email || 'analyst@maverick.security'}</div>
+                <div className="text-[10px] text-cyan-700 font-mono font-medium mt-0.5">Role: Forensic Investigator</div>
               </div>
             </div>
 
-            <div className="p-3 bg-[#080d17] rounded-lg border border-slate-800 text-xs space-y-1.5 text-slate-300">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
               <div className="flex justify-between">
-                <span className="text-slate-400">Environment:</span>
-                <span className="text-slate-200 font-mono">SOC Production</span>
+                <span className="text-slate-500">Environment:</span>
+                <span className="text-slate-800 font-mono font-medium">SOC Production</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">SIH 2026 Build:</span>
-                <span className="text-emerald-400 font-mono">v4.2.0 (Verified)</span>
+                <span className="text-slate-500">SIH 2026 Build:</span>
+                <span className="text-emerald-700 font-mono font-semibold">v4.2.0 (Verified)</span>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowProfileModal(false)}
-                className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"
+                className="px-4 py-2 text-xs rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium cursor-pointer shadow-xs"
               >
                 Close
               </button>

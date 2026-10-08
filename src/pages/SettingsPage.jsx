@@ -8,11 +8,9 @@ import {
   Save, 
   RotateCcw, 
   Info, 
-  ExternalLink,
-  Lock,
-  Cpu,
-  Server,
-  Database
+  Lock, 
+  Cpu, 
+  Server
 } from 'lucide-react';
 import { DEFAULT_FUSION_WEIGHTS } from '../services/evidenceFusion';
 
@@ -53,7 +51,7 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
         if (res.ok) {
           const data = await res.json();
           setConnectionStatus('success');
-          setConnectionMsg(`Online: ${data.service || 'MAVERICK Backend'}`);
+          setConnectionMsg(`Online: ${data.service || 'Backend Gateway'}`);
           return;
         }
       } catch {
@@ -85,30 +83,30 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
   };
 
   return (
-    <div className="space-y-6 pb-12 font-sans">
+    <div className="space-y-6 pb-12 font-sans text-slate-900">
       
       {/* Top Banner Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-[#0d1629] to-[#070b13] border border-slate-700/80 p-6 shadow-xl">
+      <div className="rounded-xl bg-white border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-cyan-400 text-xs font-mono mb-1.5">
+            <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
               <Settings className="w-3.5 h-3.5" />
-              <span>PLATFORM CONFIGURATION & SCORING ENGINE CALIBRATION</span>
+              <span>Platform Configuration & Scoring Calibration</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
-              <span>MAVERICK Settings & Intelligence Parameters</span>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Settings & Intelligence Parameters
             </h1>
-            <p className="text-xs text-slate-300 mt-1 max-w-3xl">
+            <p className="text-xs text-slate-500 mt-1 max-w-3xl">
               Calibrate multi-factor evidence fusion weights, configure threat intelligence API endpoints, and view forensic environment posture.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 font-mono text-xs">
+          <div className="flex items-center gap-2 text-xs">
             <button
               onClick={handleSaveAll}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-xs transition-colors cursor-pointer"
             >
-              {savedSuccess ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+              {savedSuccess ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Save className="w-4 h-4" />}
               <span>{savedSuccess ? 'Configuration Saved!' : 'Save Parameters'}</span>
             </button>
           </div>
@@ -119,23 +117,23 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
         
         {/* Left 2 Cols: Evidence Fusion Weights Calibration */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-6 shadow-lg space-y-5">
+          <div className="rounded-xl bg-white border border-slate-200 p-6 shadow-xs space-y-5">
             
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-white">
-                  Multi-Factor Evidence Fusion Weight Distribution
+                <Sliders className="w-5 h-5 text-slate-700" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Evidence Fusion Weight Distribution
                 </h2>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${totalPoints === 100 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40' : 'bg-amber-950/80 text-amber-300 border border-amber-500/40'}`}>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${totalPoints === 100 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
                   Sum: {totalPoints} / 100 Pts
                 </span>
                 <button
                   type="button"
                   onClick={handleResetDefaults}
-                  className="flex items-center gap-1 text-[11px] font-mono text-slate-400 hover:text-cyan-300 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 transition-colors"
+                  className="flex items-center gap-1 text-[11px] text-slate-600 hover:text-slate-900 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 transition-colors cursor-pointer font-medium"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Reset Defaults</span>
@@ -143,20 +141,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Configure maximum score contributions for each forensic inspection layer. The multi-factor engine synthesizes these weights to calculate the explainable 0–100 threat score.
             </p>
 
             {/* Slider Controls */}
-            <div className="space-y-4 font-mono text-xs">
+            <div className="space-y-3.5 text-xs">
               
               {/* 1. AI/NLP */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-cyan-300">
-                    <Cpu className="w-3.5 h-3.5" /> 1. AI / NLP Threat Analysis
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-slate-600" /> 1. AI / NLP Threat Analysis
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.aiNlp} Points
                   </span>
                 </div>
@@ -166,20 +164,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="40" 
                   value={weights.aiNlp} 
                   onChange={(e) => handleWeightChange('aiNlp', e.target.value)}
-                  className="w-full accent-cyan-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   Urgency tokens, statutory coercion, credential theft terminology, and TF-IDF embedding.
                 </span>
               </div>
 
               {/* 2. Header Forensics */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-red-300">
-                    <ShieldAlert className="w-3.5 h-3.5" /> 2. RFC 822 & Header Forensics (SPF / DKIM / DMARC)
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-slate-600" /> 2. RFC 822 & Header Forensics (SPF / DKIM / DMARC)
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.headerForensics} Points
                   </span>
                 </div>
@@ -189,20 +187,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="40" 
                   value={weights.headerForensics} 
                   onChange={(e) => handleWeightChange('headerForensics', e.target.value)}
-                  className="w-full accent-red-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   Cryptographic signature verification, alignment policies, and Reply-To / Return-Path mismatches.
                 </span>
               </div>
 
               {/* 3. URL Intelligence */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-amber-300">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold">
                     3. URL & Domain Intelligence
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.urlIntel} Points
                   </span>
                 </div>
@@ -212,20 +210,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="35" 
                   value={weights.urlIntel} 
                   onChange={(e) => handleWeightChange('urlIntel', e.target.value)}
-                  className="w-full accent-amber-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   Typosquatting/homoglyph domain indicators, external phishing feeds, and URLhaus signatures.
                 </span>
               </div>
 
               {/* 4. IP Reputation */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-purple-300">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold">
                     4. IP Reputation & Hop Analysis
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.ipReputation} Points
                   </span>
                 </div>
@@ -235,20 +233,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="30" 
                   value={weights.ipReputation} 
                   onChange={(e) => handleWeightChange('ipReputation', e.target.value)}
-                  className="w-full accent-purple-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   AbuseIPDB reports, anomalous transit hops, and unverified relay subnets.
                 </span>
               </div>
 
               {/* 5. Geo / ASN Context */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-blue-300">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold">
                     5. GeoLocation & ASN Topology
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.geoAsnContext} Points
                   </span>
                 </div>
@@ -258,20 +256,20 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="20" 
                   value={weights.geoAsnContext} 
                   onChange={(e) => handleWeightChange('geoAsnContext', e.target.value)}
-                  className="w-full accent-blue-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   Tor exit node detection, bulletproof hosting subnets, and Autonomous System categorization.
                 </span>
               </div>
 
               {/* 6. Attachment Analysis */}
-              <div className="p-3.5 rounded-lg bg-[#060a14] border border-slate-800/80 space-y-2">
-                <div className="flex justify-between items-center text-slate-200">
-                  <span className="font-bold flex items-center gap-1.5 text-emerald-300">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-800">
+                  <span className="font-semibold">
                     6. Attachment Payload & Hash Verification
                   </span>
-                  <span className="font-black text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                  <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     {weights.attachmentPayload} Points
                   </span>
                 </div>
@@ -281,9 +279,9 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                   max="20" 
                   value={weights.attachmentPayload} 
                   onChange={(e) => handleWeightChange('attachmentPayload', e.target.value)}
-                  className="w-full accent-emerald-400 cursor-pointer"
+                  className="w-full accent-slate-900 cursor-pointer"
                 />
-                <span className="text-[10px] text-slate-500 block">
+                <span className="text-[11px] text-slate-500 block">
                   Double extension detection (.pdf.exe), PE32 executable signatures, and SHA256 checksums.
                 </span>
               </div>
@@ -297,33 +295,33 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
         <div className="space-y-6">
           
           {/* Cloud Backend Gateway (Render / Custom) */}
-          <div className="rounded-xl bg-[#09101e] border border-cyan-500/40 p-5 shadow-lg space-y-4 font-mono text-xs shadow-[0_0_20px_rgba(6,182,212,0.1)]">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-cyan-400" />
-                <h3 className="font-bold text-white uppercase tracking-wider">
-                  Render / Cloud Backend
+                <Server className="w-4 h-4 text-slate-700" />
+                <h3 className="font-bold text-slate-900 uppercase tracking-wider">
+                  Backend Gateway
                 </h3>
               </div>
-              <span className="px-2 py-0.5 rounded text-[10px] bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-bold">
+              <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 border border-slate-200 text-slate-700 font-semibold">
                 GATEWAY
               </span>
             </div>
 
-            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-              Connect your Vercel frontend to your live Render backend for FastAPI ML inference, VirusTotal, AbuseIPDB, and PDF export.
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Connect your frontend to your live backend gateway for FastAPI ML inference, VirusTotal, AbuseIPDB, and PDF export.
             </p>
 
             <div className="space-y-2">
-              <label className="text-[11px] text-slate-300 block">Render Backend Gateway URL</label>
+              <label className="text-xs text-slate-700 font-medium block">Backend Gateway URL</label>
               <input
                 type="text"
                 value={backendUrl}
                 onChange={(e) => setBackendUrl(e.target.value)}
                 placeholder="https://maverick-backend.onrender.com"
-                className="w-full p-2.5 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 placeholder-slate-600 text-xs"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:bg-white focus:border-slate-400 placeholder-slate-400 text-xs"
               />
-              <span className="text-[10px] text-slate-500 block">
+              <span className="text-[11px] text-slate-400 block">
                 Leave empty to use default relative endpoint or local dev proxy.
               </span>
             </div>
@@ -333,19 +331,19 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
                 type="button"
                 onClick={handleTestConnection}
                 disabled={connectionStatus === 'testing'}
-                className="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
               >
                 <span>{connectionStatus === 'testing' ? 'Testing...' : 'Ping Gateway'}</span>
               </button>
 
               {connectionStatus === 'success' && (
-                <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   <span>{connectionMsg}</span>
                 </span>
               )}
               {connectionStatus === 'error' && (
-                <span className="text-[11px] text-red-400 truncate max-w-[180px]">
+                <span className="text-xs text-red-600 truncate max-w-[180px]">
                   {connectionMsg}
                 </span>
               )}
@@ -353,84 +351,80 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
           </div>
 
           {/* Threat Feeds Integration Card */}
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 shadow-lg space-y-4 font-mono text-xs">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-              <Key className="w-4 h-4 text-cyan-400" />
-              <h3 className="font-bold text-white uppercase tracking-wider">
+          <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Key className="w-4 h-4 text-slate-700" />
+              <h3 className="font-bold text-slate-900 uppercase tracking-wider">
                 External Threat Feeds
               </h3>
             </div>
 
-            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+            <p className="text-xs text-slate-500 leading-relaxed">
               Provide optional API keys for real-time external intelligence querying. Never committed to source control.
             </p>
 
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-slate-300 block mb-1">VirusTotal v3 API Key</label>
+                <label className="text-xs text-slate-700 font-medium block mb-1">VirusTotal v3 API Key</label>
                 <div className="relative">
                   <input
                     type="password"
                     value={vtApiKey}
                     onChange={(e) => setVtApiKey(e.target.value)}
                     placeholder="Enter VirusTotal API key..."
-                    className="w-full p-2.5 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:bg-white focus:border-slate-400"
                   />
-                  <Lock className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-3" />
+                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-300 block mb-1">AbuseIPDB v2 API Key</label>
+                <label className="text-xs text-slate-700 font-medium block mb-1">AbuseIPDB v2 API Key</label>
                 <div className="relative">
                   <input
                     type="password"
                     value={abuseApiKey}
                     onChange={(e) => setAbuseApiKey(e.target.value)}
                     placeholder="Enter AbuseIPDB API key..."
-                    className="w-full p-2.5 bg-[#060a14] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:bg-white focus:border-slate-400"
                   />
-                  <Lock className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-3" />
+                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3" />
                 </div>
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-[#050810] border border-slate-800 text-[10px] text-slate-400 space-y-1">
-              <div className="flex items-center gap-1.5 text-cyan-300 font-bold">
-                <Info className="w-3.5 h-3.5" />
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+              <div className="flex items-center gap-1.5 text-slate-800 font-semibold">
+                <Info className="w-3.5 h-3.5 text-slate-500" />
                 <span>Dual-Mode Architecture:</span>
               </div>
               <p>
-                When running the optional Express backend gateway, keys are read securely from <code className="text-slate-300">.env</code> to avoid CORS and browser rate limits.
+                When running the Express gateway, keys are read securely from server <code className="text-slate-800">.env</code> to avoid CORS and browser rate limits.
               </p>
             </div>
           </div>
 
           {/* Legal & Forensic Standard Card */}
-          <div className="rounded-xl bg-[#09101e] border border-slate-800 p-5 shadow-lg space-y-3 font-mono text-xs">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-              <Server className="w-4 h-4 text-emerald-400" />
-              <h3 className="font-bold text-white uppercase tracking-wider">
-                SIH Forensic Standard
+          <div className="rounded-xl bg-white border border-slate-200 p-5 shadow-xs space-y-3 text-xs">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Server className="w-4 h-4 text-slate-700" />
+              <h3 className="font-bold text-slate-900 uppercase tracking-wider">
+                Forensic Standards
               </h3>
             </div>
             
-            <div className="space-y-2 text-[11px] text-slate-300">
+            <div className="space-y-2 text-xs text-slate-700">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Target Standard:</span>
-                <span className="text-cyan-300 font-bold">SIH 2026 Ready</span>
+                <span className="text-slate-500">Untrusted Attachment Execution:</span>
+                <span className="text-emerald-700 font-bold">STRICTLY DISABLED</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Untrusted Attachment Execution:</span>
-                <span className="text-emerald-400 font-bold">STRICTLY DISABLED</span>
+                <span className="text-slate-500">Fabricated Threat Intel:</span>
+                <span className="text-red-700 font-bold">PROHIBITED</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Fabricated Threat Intel:</span>
-                <span className="text-red-400 font-bold">PROHIBITED</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">GeoLocation Attribution:</span>
-                <span className="text-amber-300 font-bold">Infrastructure Only</span>
+                <span className="text-slate-500">GeoLocation Attribution:</span>
+                <span className="text-slate-900 font-semibold">Infrastructure Only</span>
               </div>
             </div>
           </div>

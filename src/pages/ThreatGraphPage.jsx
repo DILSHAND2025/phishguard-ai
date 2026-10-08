@@ -3,19 +3,9 @@ import {
   GitFork, 
   ArrowRight, 
   ArrowLeft, 
-  AlertTriangle, 
-  Info, 
-  Mail, 
-  Globe, 
-  Server, 
-  Paperclip, 
-  MapPin, 
   Copy, 
   Check, 
-  Layers, 
   X,
-  Maximize2,
-  Binary,
   Target
 } from 'lucide-react';
 import { 
@@ -28,36 +18,31 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-// Helper to style nodes by risk status
+// Helper to style nodes by risk status (clean light theme)
 function getNodeStyle(riskLevel, type) {
   const isMal = riskLevel === 'CRITICAL' || riskLevel === 'HIGH';
   const isSusp = riskLevel === 'SUSPICIOUS' || riskLevel === 'MEDIUM';
 
-  let bg = '#09101e';
-  let border = '1.5px solid #334155';
-  let color = '#94a3b8';
-  let glow = 'none';
+  let bg = '#ffffff';
+  let border = '1.5px solid #cbd5e1';
+  let color = '#334155';
 
   if (type === 'Email') {
-    bg = '#042f2e';
-    border = '2px solid #14b8a6';
-    color = '#5eead4';
-    glow = '0 0 20px rgba(20, 184, 166, 0.3)';
+    bg = '#f8fafc';
+    border = '2px solid #0f172a';
+    color = '#0f172a';
   } else if (isMal) {
-    bg = '#450a0a';
-    border = '1.5px solid #ef4444';
-    color = '#fca5a5';
-    glow = '0 0 18px rgba(239, 68, 68, 0.3)';
+    bg = '#fef2f2';
+    border = '1.5px solid #fca5a5';
+    color = '#991b1b';
   } else if (isSusp) {
-    bg = '#451a03';
-    border = '1.5px solid #f59e0b';
-    color = '#fcd34d';
-    glow = '0 0 15px rgba(245, 158, 11, 0.25)';
+    bg = '#fffbeb';
+    border = '1.5px solid #fde68a';
+    color = '#92400e';
   } else {
-    bg = '#082f49';
-    border = '1.5px solid #0284c7';
-    color = '#7dd3fc';
-    glow = '0 0 15px rgba(2, 132, 199, 0.2)';
+    bg = '#f0f9ff';
+    border = '1.5px solid #bae6fd';
+    color = '#0369a1';
   }
 
   return {
@@ -65,11 +50,11 @@ function getNodeStyle(riskLevel, type) {
     color,
     border,
     borderRadius: '10px',
-    fontFamily: 'JetBrains Mono, monospace',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     fontSize: '11px',
-    fontWeight: 'bold',
+    fontWeight: '600',
     padding: '10px 14px',
-    boxShadow: glow,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     cursor: 'pointer'
   };
 }
@@ -83,7 +68,6 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
     const email = currentAnalysis?.email || {};
     const geoInfo = currentAnalysis?.geoInfo || {};
     const iocs = currentAnalysis?.iocs || [];
-    const campaign = currentAnalysis?.campaign || {};
     const fusion = currentAnalysis?.fusion || {};
 
     const subject = email.subject || 'Suspicious BEC Wire Directive';
@@ -149,28 +133,28 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
         type: 'default',
         position: { x: 400, y: 140 },
         data: {
-          label: `⚡ IP: ${originatingIP}`,
-          nodeType: 'IP Address',
+          label: `🖥️ Origin IP: ${originatingIP}`,
+          nodeType: 'IP',
           indicator: originatingIP,
-          riskLevel: 'HIGH',
-          purpose: 'Originating Egress Node',
-          forensicContext: `Observed egress relay exhibiting Tor exit node signatures and multiple abuse reports (AbuseIPDB score: 94%).`
+          riskLevel: 'CRITICAL',
+          purpose: 'Egress Routing Infrastructure',
+          forensicContext: `Network origin IP recorded in earliest Received header hop. Flagged for anonymizing transit proxy.`
         },
-        style: getNodeStyle('HIGH', 'IP')
+        style: getNodeStyle('CRITICAL', 'IP')
       },
 
       // 5. ASN Node
       {
         id: 'node-asn',
         type: 'default',
-        position: { x: 340, y: 260 },
+        position: { x: 300, y: 260 },
         data: {
-          label: `🏢 ASN: ${asn} (${geoInfo.asnOrg || 'M247 Ltd'})`,
-          nodeType: 'Autonomous System',
+          label: `🏢 ASN: ${asn} (M247)`,
+          nodeType: 'ASN',
           indicator: asn,
           riskLevel: 'MEDIUM',
-          purpose: 'BGP Routing Authority',
-          forensicContext: `Autonomous System ${asn} provides commercial hosting and anonymizing relay transit routes.`
+          purpose: 'Autonomous System Transit Provider',
+          forensicContext: `Hosting and transit autonomous network organization operating anonymizing Tor egress hops.`
         },
         style: getNodeStyle('MEDIUM', 'ASN')
       },
@@ -179,16 +163,16 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
       {
         id: 'node-geo',
         type: 'default',
-        position: { x: 340, y: 380 },
+        position: { x: 470, y: 260 },
         data: {
-          label: `📍 Geo: ${country} (${geoInfo.countryCode || 'DE'})`,
-          nodeType: 'Observed Infrastructure GeoLocation',
-          indicator: `${country} (Lat: ${geoInfo.latitude || 50.11}, Lon: ${geoInfo.longitude || 8.68})`,
+          label: `📍 Geo: ${country}`,
+          nodeType: 'GeoLocation',
+          indicator: country,
           riskLevel: 'LOW',
-          purpose: 'Physical Infrastructure Location',
-          forensicContext: `Observed network infrastructure geolocates to ${country}. NOTE: IP GeoLocation represents observed hosting infrastructure and does not establish the physical identity of the attacker.`
+          purpose: 'Physical Routing Location',
+          forensicContext: `Infrastructure location resolved via BGP table telemetry. (Reflects egress server location, not confirmed threat actor citizenship).`
         },
-        style: getNodeStyle('LOW', 'Geo')
+        style: getNodeStyle('LOW', 'GeoLocation')
       },
 
       // 7. Attachment Node
@@ -201,8 +185,8 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
           nodeType: 'Attachment',
           indicator: attachment.filename,
           riskLevel: 'CRITICAL',
-          purpose: 'Obfuscated Binary Payload',
-          forensicContext: `Double-extension executable disguised as a PDF document. Contains PE32 headers designed for process injection.`
+          purpose: 'Malicious Executable Dropper',
+          forensicContext: `Double extension (.pdf.exe) obfuscating PE32 binary payload. Static header analysis confirms executable byte signature.`
         },
         style: getNodeStyle('CRITICAL', 'Attachment')
       },
@@ -211,45 +195,27 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
       {
         id: 'node-hash',
         type: 'default',
-        position: { x: 620, y: 260 },
+        position: { x: 640, y: 260 },
         data: {
-          label: `🔑 SHA256: ${attachment.sha256 ? attachment.sha256.substring(0, 16) + '...' : '8f4c102948a7...'}`,
-          nodeType: 'Cryptographic Hash',
+          label: `#️⃣ SHA256: ${attachment.sha256?.substring(0, 12)}...`,
+          nodeType: 'Hash',
           indicator: attachment.sha256 || '8f4c102948a7b6c5d4e3f27d1a293b6e8f4c102948a7b6c5d4e3f27d1a293b6e',
           riskLevel: 'CRITICAL',
-          purpose: 'Malware Signature Checksum',
-          forensicContext: `Cryptographic SHA256 signature matching known Trojan dropper signatures in threat feeds.`
+          purpose: 'Cryptographic Artifact Fingerprint',
+          forensicContext: `Immutable SHA-256 fingerprint verified through static binary hashing. Matches malware repository dropper signatures.`
         },
         style: getNodeStyle('CRITICAL', 'Hash')
-      },
-
-      // 9. Campaign Cluster Node
-      {
-        id: 'node-campaign',
-        type: 'default',
-        position: { x: 180, y: 380 },
-        data: {
-          label: `🎯 Campaign: ${campaign.campaignId || 'TC-001'}`,
-          nodeType: 'Threat Campaign Cluster',
-          indicator: campaign.title || 'Targeted Infrastructure Cluster',
-          riskLevel: 'HIGH',
-          purpose: 'Correlated Multi-Email Campaign',
-          forensicContext: campaign.correlationReason || 'Potential threat campaign based on shared network infrastructure across state administrative units.'
-        },
-        style: getNodeStyle('HIGH', 'Campaign')
       }
     ];
 
     const edges = [
-      { id: 'e-email-domain', source: 'node-email', target: 'node-domain', animated: true, style: { stroke: '#0284c7', strokeWidth: 2 } },
-      { id: 'e-domain-url', source: 'node-domain', target: 'node-url', animated: true, style: { stroke: '#ef4444', strokeWidth: 2 } },
-      { id: 'e-email-ip', source: 'node-email', target: 'node-ip', animated: true, style: { stroke: '#a855f7', strokeWidth: 2 } },
-      { id: 'e-ip-asn', source: 'node-ip', target: 'node-asn', style: { stroke: '#64748b', strokeWidth: 1.5 } },
-      { id: 'e-asn-geo', source: 'node-asn', target: 'node-geo', style: { stroke: '#64748b', strokeWidth: 1.5 } },
-      { id: 'e-email-att', source: 'node-email', target: 'node-attachment', animated: true, style: { stroke: '#ef4444', strokeWidth: 2 } },
-      { id: 'e-att-hash', source: 'node-attachment', target: 'node-hash', style: { stroke: '#ef4444', strokeWidth: 1.5 } },
-      { id: 'e-domain-campaign', source: 'node-domain', target: 'node-campaign', style: { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '4 4' } },
-      { id: 'e-ip-campaign', source: 'node-ip', target: 'node-campaign', style: { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '4 4' } }
+      { id: 'e-email-domain', source: 'node-email', target: 'node-domain', style: { stroke: '#94a3b8', strokeWidth: 1.5 } },
+      { id: 'e-domain-url', source: 'node-domain', target: 'node-url', style: { stroke: '#ef4444', strokeWidth: 1.5 } },
+      { id: 'e-email-ip', source: 'node-email', target: 'node-ip', style: { stroke: '#94a3b8', strokeWidth: 1.5 } },
+      { id: 'e-ip-asn', source: 'node-ip', target: 'node-asn', style: { stroke: '#94a3b8', strokeWidth: 1.5 } },
+      { id: 'e-ip-geo', source: 'node-ip', target: 'node-geo', style: { stroke: '#94a3b8', strokeWidth: 1.5 } },
+      { id: 'e-email-att', source: 'node-email', target: 'node-attachment', style: { stroke: '#ef4444', strokeWidth: 1.5 } },
+      { id: 'e-att-hash', source: 'node-attachment', target: 'node-hash', style: { stroke: '#ef4444', strokeWidth: 1.5 } }
     ];
 
     return { initialNodes: nodes, initialEdges: edges };
@@ -275,29 +241,28 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
   };
 
   return (
-    <div className="space-y-6 pb-12 font-sans">
+    <div className="space-y-6 pb-12 font-sans text-slate-900">
       
       {/* Top Banner Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0d162a] via-[#091122] to-[#070b13] border border-cyan-500/40 p-6 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+      <div className="rounded-xl bg-white border border-slate-200 p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-cyan-400 text-xs font-mono mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              STAGE 06 OF 08 • THREAT INFRASTRUCTURE GRAPH (MAJOR NOVELTY)
+            <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+              <span>Threat Infrastructure Graph</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white font-mono flex items-center gap-2.5">
-                <GitFork className="w-6 h-6 text-cyan-400" />
-                <span>Threat Infrastructure Relationship Graph</span>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2.5">
+                <GitFork className="w-6 h-6 text-slate-700" />
+                <span>Relationship Graph</span>
               </h1>
-              <span className="px-2.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold">
-                Interactive Node Topology
+              <span className="px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold">
+                Interactive Topology
               </span>
             </div>
 
-            <p className="text-xs text-slate-300 mt-1.5 font-mono">
-              Graph visualization mapping Email ➔ Domain ➔ URL ➔ IP ➔ ASN ➔ GeoLocation and Attachment ➔ Cryptographic Hashes.
+            <p className="text-xs text-slate-500 mt-1.5">
+              Graph visualization mapping Email ➔ Domain ➔ URL ➔ IP ➔ ASN ➔ GeoLocation and Attachment ➔ Hashes.
             </p>
           </div>
 
@@ -307,20 +272,20 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
               type="button"
               id="btn-back-geo-top"
               onClick={() => onViewChange('geo-asn')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#091122] hover:bg-[#0e1b33] border border-slate-700 text-slate-300 font-mono text-xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
               <span>Back to Geo/ASN</span>
             </button>
 
             <button
               type="button"
               id="btn-proceed-case-top"
-              onClick={() => onViewChange('investigation-case')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all cursor-pointer"
+              onClick={() => onViewChange('cases')}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <Target className="w-4 h-4" />
-              <span>Proceed to Investigation Case</span>
+              <span>Proceed to Cases</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -328,7 +293,7 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
       </div>
 
       {/* Graph Visualizer Container with Sidebar Drawer */}
-      <div className="relative rounded-2xl border border-slate-800 bg-[#060a12] shadow-2xl overflow-hidden h-[620px]">
+      <div className="relative rounded-xl border border-slate-200 bg-slate-50 shadow-xs overflow-hidden h-[620px]">
         
         {/* React Flow Viewport */}
         <ReactFlow
@@ -342,55 +307,55 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
           minZoom={0.5}
           maxZoom={1.8}
         >
-          <Background color="#1e293b" gap={20} size={1} />
-          <Controls className="bg-slate-900 border border-slate-700 text-cyan-400 fill-current" />
+          <Background color="#cbd5e1" gap={20} size={1} />
+          <Controls className="bg-white border border-slate-200 text-slate-700 shadow-xs" />
           <MiniMap 
             nodeColor={(node) => {
-              if (node.id === 'node-email') return '#14b8a6';
+              if (node.id === 'node-email') return '#0f172a';
               if (node.id === 'node-attachment' || node.id === 'node-hash') return '#ef4444';
               if (node.id === 'node-domain' || node.id === 'node-url') return '#0284c7';
               return '#a855f7';
             }}
-            maskColor="rgba(6, 10, 18, 0.7)"
-            className="bg-[#09101e] border border-slate-800 rounded-lg"
+            maskColor="rgba(241, 245, 249, 0.7)"
+            className="bg-white border border-slate-200 rounded-lg shadow-2xs"
           />
         </ReactFlow>
 
         {/* Legend Overlay at Top Left */}
-        <div className="absolute top-4 left-4 z-10 p-3 rounded-xl bg-[#09101e]/90 backdrop-blur-md border border-slate-800 font-mono text-[10px] space-y-1.5 shadow-lg">
-          <span className="font-bold text-slate-400 uppercase tracking-wider block">Node Classification:</span>
+        <div className="absolute top-4 left-4 z-10 p-3 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 text-xs space-y-1.5 shadow-sm">
+          <span className="font-bold text-slate-600 uppercase tracking-wider block text-[10px]">Classification:</span>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-            <span className="text-slate-300">Malicious Artifact</span>
+            <span className="text-slate-700 font-medium">Malicious Artifact</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span className="text-slate-300">Suspicious / Transit</span>
+            <span className="text-slate-700 font-medium">Suspicious Indicator</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-            <span className="text-slate-300">Email Ingress Root</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-800"></span>
+            <span className="text-slate-700 font-medium">Ingress Origin</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-500"></span>
-            <span className="text-slate-300">Resolved Infrastructure</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+            <span className="text-slate-700 font-medium">Network Node</span>
           </div>
         </div>
 
         {/* Interactive Node Details Drawer (Slides in on Node Click) */}
         {selectedNodeData && (
-          <div className="absolute top-4 right-4 z-20 w-80 sm:w-96 rounded-2xl bg-[#09101e]/95 backdrop-blur-md border border-cyan-500/50 p-5 shadow-[0_0_30px_rgba(6,182,212,0.2)] font-mono text-xs space-y-4 animate-fadeIn">
+          <div className="absolute top-4 right-4 z-20 w-80 sm:w-96 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-300 p-5 shadow-lg text-xs space-y-4">
             
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-cyan-400 font-bold uppercase tracking-wider">
+                <span className="text-slate-900 font-bold uppercase tracking-wider">
                   {selectedNodeData.nodeType} Inspector
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedNodeData(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -398,21 +363,21 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
 
             <div className="space-y-3">
               <div>
-                <span className="text-[10px] uppercase text-slate-500 block">Indicator Value</span>
-                <div className="font-bold text-white text-xs break-all bg-[#060a14] p-2 rounded border border-slate-800">
+                <span className="text-[10px] uppercase text-slate-500 block font-semibold">Indicator Value</span>
+                <div className="font-bold text-slate-900 text-xs break-all bg-slate-50 p-2.5 rounded-lg border border-slate-200 mt-1 font-mono">
                   {selectedNodeData.indicator}
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] uppercase text-slate-500 block">Threat Classification</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                  <span className="text-[10px] uppercase text-slate-500 block font-semibold">Classification</span>
+                  <span className={`inline-block mt-0.5 px-2.5 py-0.5 rounded text-[10px] font-bold border ${
                     selectedNodeData.riskLevel === 'CRITICAL' || selectedNodeData.riskLevel === 'HIGH'
-                      ? 'bg-red-950 text-red-300 border-red-500/40'
+                      ? 'bg-red-50 text-red-700 border-red-200'
                       : selectedNodeData.riskLevel === 'MEDIUM'
-                        ? 'bg-amber-950 text-amber-300 border-amber-500/40'
-                        : 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   }`}>
                     {selectedNodeData.riskLevel}
                   </span>
@@ -421,21 +386,21 @@ export const ThreatGraphPage = ({ onViewChange, currentAnalysis }) => {
                 <button
                   type="button"
                   onClick={() => handleCopy(selectedNodeData.indicator)}
-                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-cyan-300 px-2 py-1 rounded bg-[#060a14] border border-slate-800 transition-colors cursor-pointer"
+                  className="flex items-center gap-1 text-[11px] text-slate-600 hover:text-slate-900 px-2 py-1 rounded bg-slate-50 border border-slate-200 transition-colors cursor-pointer font-medium"
                 >
-                  {copiedText ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  {copiedText ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-400" />}
                   <span>{copiedText ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-slate-500 block">Role in Attack Chain</span>
-                <span className="text-slate-300 font-medium">{selectedNodeData.purpose}</span>
+                <span className="text-[10px] uppercase text-slate-500 block font-semibold">Role in Attack Chain</span>
+                <span className="text-slate-800 font-medium block mt-0.5">{selectedNodeData.purpose}</span>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-slate-500 block">Forensic Context & Intelligence</span>
-                <p className="text-[11px] text-slate-300 font-sans leading-relaxed mt-1">
+                <span className="text-[10px] uppercase text-slate-500 block font-semibold">Forensic Context</span>
+                <p className="text-xs text-slate-600 leading-relaxed mt-1">
                   {selectedNodeData.forensicContext}
                 </p>
               </div>
