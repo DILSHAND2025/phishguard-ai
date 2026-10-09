@@ -64,7 +64,7 @@ export function calculateEvidenceFusion({
       aiEvidenceList.push(`Key tokens: ${aiThreat.keyTokens.slice(0, 4).join(', ')}`);
     }
   } else {
-    aiEvidenceList.push('AI Prediction: UNAVAILABLE (Inference service offline). 0/25 points allocated');
+    aiEvidenceList.push('AI Prediction: UNAVAILABLE (Inference service offline). 0/25 points allocated; analysis incomplete and score excludes ML evidence');
   }
 
   factors.push({
@@ -360,6 +360,9 @@ export function calculateEvidenceFusion({
     factors,
     verifiedReasons: allReasons,
     weightsUsed: weights,
-    evaluatedAt: new Date().toISOString()
+    evaluatedAt: new Date().toISOString(),
+    isComplete: isMlAvailable,
+    isIncomplete: !isMlAvailable,
+    inferenceOffline: !isMlAvailable
   };
 }

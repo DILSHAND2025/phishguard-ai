@@ -394,9 +394,16 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
           <div className="rounded-xl bg-white border border-slate-200 p-6 sm:p-8 space-y-6 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-6">
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  THREAT ASSESSMENT
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    THREAT ASSESSMENT
+                  </span>
+                  {(currentAnalysis?.fusion?.isIncomplete || !currentAnalysis?.aiThreat?.isMlAvailable) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      INCOMPLETE (ML OFFLINE)
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-baseline gap-2 mt-1.5">
                   <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
                     {score}
@@ -413,6 +420,11 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                 <div className="text-xs font-medium text-slate-600">
                   Classification: <strong className="text-slate-900 font-semibold">{classification}</strong>
                 </div>
+                {(currentAnalysis?.fusion?.isIncomplete || !currentAnalysis?.aiThreat?.isMlAvailable) && (
+                  <div className="text-[11px] text-amber-700 font-medium">
+                    Score reflects forensics only; ML inference is offline.
+                  </div>
+                )}
               </div>
             </div>
 

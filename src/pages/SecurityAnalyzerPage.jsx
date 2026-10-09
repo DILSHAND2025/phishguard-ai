@@ -231,7 +231,7 @@ export const SecurityAnalyzerPage = ({
             ) : (
               <span className="text-amber-700 font-medium flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                In-Memory Session
+                Unpersisted (Database Offline)
               </span>
             )}
           </div>
@@ -317,11 +317,14 @@ export const SecurityAnalyzerPage = ({
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
               ML Detection
             </span>
-            <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+            <span className={`w-2 h-2 rounded-full ${isMlAvailable ? 'bg-cyan-500' : 'bg-amber-400'}`}></span>
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight pt-0.5">
             {mlDetectionValue}
           </div>
+          {!isMlAvailable && (
+            <span className="text-[10px] text-amber-700 block font-medium">Inference service offline</span>
+          )}
         </div>
 
         {/* Card 3: IOC Count */}
@@ -361,9 +364,16 @@ export const SecurityAnalyzerPage = ({
       <div className="rounded-xl bg-white border border-slate-200 p-6 sm:p-8 space-y-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              THREAT ASSESSMENT
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                THREAT ASSESSMENT
+              </span>
+              {!isMlAvailable && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  INCOMPLETE (ML OFFLINE)
+                </span>
+              )}
+            </div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
                 {threatScore}
@@ -381,7 +391,9 @@ export const SecurityAnalyzerPage = ({
               Classification: <strong className="text-slate-900 font-semibold">{classification}</strong>
             </div>
             <div className="text-[11px] text-slate-500">
-              High confidence indicators detected
+              {isMlAvailable 
+                ? 'High confidence indicators detected' 
+                : 'Incomplete: Score excludes AI/NLP model evidence (service offline)'}
             </div>
           </div>
         </div>

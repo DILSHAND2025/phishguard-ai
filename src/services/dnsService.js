@@ -62,6 +62,26 @@ export function normalizeDomain(domain) {
 }
 
 /**
+ * Checks whether a domain is a reserved example/test domain per RFC 2606 / RFC 6761.
+ * Reserved domains (e.g. .example, .invalid, .localhost) cannot be verified via public DNS.
+ * 
+ * @param {string} domain 
+ * @returns {boolean}
+ */
+export function isReservedExampleDomain(domain) {
+  if (!domain || typeof domain !== 'string') return false;
+  const norm = normalizeDomain(domain);
+  return (
+    norm.endsWith('.example') ||
+    norm === 'example' ||
+    norm.endsWith('.invalid') ||
+    norm === 'invalid' ||
+    norm.endsWith('.localhost') ||
+    norm === 'localhost'
+  );
+}
+
+/**
  * Resolves TXT records for a given domain.
  * Supports:
  * - In-memory TTL caching
@@ -77,7 +97,7 @@ export function normalizeDomain(domain) {
  * @returns {Promise<{
  *   domain: string,
  *   records: string[],
- *   status: 'RESOLVED' | 'NO_RECORDS' | 'NXDOMAIN' | 'TIMEOUT' | 'ERROR' | 'INVALID_DOMAIN' | 'UNSUPPORTED_RUNTIME',
+ *   status: 'RESOLVED' | 'NO_RECORDS' | 'NXDOMAIN' | 'TIMEOUT' | 'ERROR' | 'INVALID_DOMAIN' | 'UNSUPPORTED_RUNTIME' | 'UNAVAILABLE',
  *   fromCache: boolean,
  *   raw: any,
  *   error?: string
@@ -94,6 +114,18 @@ export async function resolveTxt(domain, options = {}) {
       fromCache: false,
       raw: null,
       error: `Invalid domain syntax: ${domain}`
+    };
+  }
+
+  // RFC 2606 / RFC 6761: If this is a reserved .example domain without a custom mock resolver
+  if (isReservedExampleDomain(normalized) && typeof options.resolver !== 'function') {
+    return {
+      domain: normalized,
+      records: [],
+      status: 'UNAVAILABLE',
+      fromCache: false,
+      raw: null,
+      error: 'DNS verification unavailable for reserved example domain (.example)'
     };
   }
 
@@ -121,6 +153,16 @@ export async function resolveTxt(domain, options = {}) {
       if (Array.isArray(result)) {
         // Flatten chunks: DNS TXT records can be returned as string[] or string[][]
         const flatRecords = result.map(entry => Array.isArray(entry) ? entry.join('') : String(entry));
+        if (flatRecords.length === 0 && isReservedExampleDomain(normalized)) {
+          return {
+            domain: normalized,
+            records: [],
+            status: 'UNAVAILABLE',
+            fromCache: false,
+            raw: result,
+            error: 'DNS verification unavailable for reserved example domain (.example)'
+          };
+        }
         return {
           domain: normalized,
           records: flatRecords,
@@ -133,6 +175,16 @@ export async function resolveTxt(domain, options = {}) {
         const records = Array.isArray(result.records)
           ? result.records.map(entry => Array.isArray(entry) ? entry.join('') : String(entry))
           : [];
+        if (records.length === 0 && isReservedExampleDomain(normalized) && result.status !== 'RESOLVED') {
+          return {
+            domain: normalized,
+            records: [],
+            status: 'UNAVAILABLE',
+            fromCache: false,
+            raw: result.raw || result,
+            error: 'DNS verification unavailable for reserved example domain (.example)'
+          };
+        }
         return {
           domain: normalized,
           records,
@@ -140,6 +192,16 @@ export async function resolveTxt(domain, options = {}) {
           fromCache: false,
           raw: result.raw || result,
           error: result.error
+        };
+      }
+      if (isReservedExampleDomain(normalized)) {
+        return {
+          domain: normalized,
+          records: [],
+          status: 'UNAVAILABLE',
+          fromCache: false,
+          raw: result,
+          error: 'DNS verification unavailable for reserved example domain (.example)'
         };
       }
       return {

@@ -451,4 +451,168 @@ Please expedite statutory transfer.`;
     assert.ok(fusion.verifiedReasons.some(r => r.includes('SPF') || r.includes('DMARC')));
   });
 
+  // 23. Missing SPF Record (NO_RECORD)
+  await t.test('23. Missing SPF record handling', async () => {
+    const emptyResolver = createMockDnsResolver({});
+    const result = await querySpfRecord('nospecificspf.org', { resolver: emptyResolver });
+    assert.equal(result.status, 'NO_RECORD');
+    assert.equal(result.record, null);
+    assert.ok(result.warnings.some(w => w.includes('No SPF record')));
+  });
+
+  // 24. Email without DKIM-Signature header
+  await t.test('24. Email without DKIM-Signature header', async () => {
+    const rawNoDkim = `From: "Alerts" <alerts@domain.org>
+Return-Path: <alerts@domain.org>
+Subject: Notice
+
+Notification text without DKIM`;
+
+    const res = await analyzeEmailAuthentication(rawNoDkim, {
+      dnsResolver: createMockDnsResolver({
+        'domain.org': ['v=spf1 -all'],
+        '_dmarc.domain.org': ['v=DMARC1; p=reject;']
+      })
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.dkim.status, 'NO_SIGNATURE');
+    assert.equal(res.observedEvidence.dkimSignatures.length, 0);
+    assert.equal(res.alignment.dkimAuthPass, false);
+    assert.equal(res.alignment.dkimAligned, false);
+  });
+
+  // 25. Missing DMARC Record (NO_RECORD) - Never displays as DMARC PASSED
+  await t.test('25. Missing DMARC record prevents DMARC alignment pass even with matching domains', async () => {
+    const emailMatchingDomainsNoDmarc = `From: "Billing" <service@paypal.test>
+Return-Path: <service@paypal.test>
+Authentication-Results: mx.receiver.net; spf=pass smtp.mailfrom=service@paypal.test
+Subject: Invoice
+
+Payment request`;
+
+    const res = await analyzeEmailAuthentication(emailMatchingDomainsNoDmarc, {
+      dnsResolver: createMockDnsResolver({
+        'paypal.test': ['v=spf1 -all']
+        // No _dmarc.paypal.test record!
+      })
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.dmarc.status, 'NO_RECORD');
+    assert.equal(res.alignment.hasDmarcPolicy, false);
+    assert.equal(res.alignment.spfAligned, true, 'SPF identifier matches domain');
+    assert.equal(res.alignment.dmarcAligned, false, 'DMARC alignment cannot pass without a published DMARC policy');
+    assert.equal(res.alignment.dmarc, 'UNENFORCED', 'DMARC alignment must be marked UNENFORCED');
+    assert.equal(res.summary.alignmentResult, 'UNENFORCED');
+  });
+
+  // 26. Alignment Mismatch Detection
+  await t.test('26. DMARC policy present but SPF and DKIM domains mismatch From header', async () => {
+    const emailSpoofed = `From: "CEO" <ceo@corporate.com>
+Return-Path: <attacker@mailhost.net>
+DKIM-Signature: v=1; a=rsa-sha256; d=mailhost.net; s=k1; b=sig; bh=hash;
+Authentication-Results: mx.target.com; spf=pass smtp.mailfrom=attacker@mailhost.net; dkim=pass header.d=mailhost.net; dmarc=fail action=none
+Subject: Wire Transfer
+
+Please transfer funds.`;
+
+    const res = await analyzeEmailAuthentication(emailSpoofed, {
+      dnsResolver: createMockDnsResolver({
+        'corporate.com': ['v=spf1 -all'],
+        '_dmarc.corporate.com': ['v=DMARC1; p=reject;'],
+        'mailhost.net': ['v=spf1 -all'],
+        'k1._domainkey.mailhost.net': ['v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Y3y...']
+      })
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.dmarc.status, 'RECORD_FOUND');
+    assert.equal(res.alignment.hasDmarcPolicy, true);
+    assert.equal(res.alignment.spfAligned, false, 'SPF return-path mailhost.net does not align with corporate.com');
+    assert.equal(res.alignment.dkimAligned, false, 'DKIM d=mailhost.net does not align with corporate.com');
+    assert.equal(res.alignment.dmarcAligned, false, 'DMARC alignment MUST fail');
+    assert.equal(res.alignment.dmarc, 'FAIL');
+    assert.equal(res.summary.alignmentResult, 'MISALIGNED');
+  });
+
+  // 27. Genuine Alignment Success (SPF and DKIM passing under RFC 7489)
+  await t.test('27. Genuine DMARC alignment success with valid policy and authenticating aligned streams', async () => {
+    // 27A: SPF authenticates and aligns
+    const spfAuthenticEmail = `From: "Bank Support" <support@trustedbank.com>
+Return-Path: <bounce@trustedbank.com>
+Authentication-Results: mx.cust.org; spf=pass smtp.mailfrom=bounce@trustedbank.com
+Subject: Statement
+
+Monthly statement`;
+
+    const resSpf = await analyzeEmailAuthentication(spfAuthenticEmail, {
+      dnsResolver: createMockDnsResolver({
+        'trustedbank.com': ['v=spf1 -all'],
+        '_dmarc.trustedbank.com': ['v=DMARC1; p=reject;']
+      })
+    });
+
+    assert.equal(resSpf.alignment.hasDmarcPolicy, true);
+    assert.equal(resSpf.alignment.spfAuthPass, true);
+    assert.equal(resSpf.alignment.spfAligned, true);
+    assert.equal(resSpf.alignment.dmarcAligned, true, 'SPF pass + aligned domain + DMARC policy passes DMARC');
+    assert.equal(resSpf.alignment.dmarc, 'PASS');
+    assert.equal(resSpf.summary.alignmentResult, 'ALIGNED');
+
+    // 27B: DKIM authenticates and aligns even if SPF is misaligned
+    const dkimAuthenticEmail = `From: "Bank Support" <support@trustedbank.com>
+Return-Path: <notifications@thirdpartyrelay.org>
+DKIM-Signature: v=1; a=rsa-sha256; d=trustedbank.com; s=s1; b=sig; bh=hash;
+Authentication-Results: mx.cust.org; spf=pass smtp.mailfrom=notifications@thirdpartyrelay.org; dkim=pass header.d=trustedbank.com header.s=s1
+Subject: Statement
+
+Monthly statement`;
+
+    const resDkim = await analyzeEmailAuthentication(dkimAuthenticEmail, {
+      dnsResolver: createMockDnsResolver({
+        'thirdpartyrelay.org': ['v=spf1 -all'],
+        'trustedbank.com': ['v=spf1 -all'],
+        '_dmarc.trustedbank.com': ['v=DMARC1; p=reject;'],
+        's1._domainkey.trustedbank.com': ['v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Y3y...']
+      })
+    });
+
+    assert.equal(resDkim.alignment.hasDmarcPolicy, true);
+    assert.equal(resDkim.alignment.spfAligned, false, 'Third-party relay does not SPF align with trustedbank.com');
+    assert.equal(resDkim.alignment.dkimAuthPass, true);
+    assert.equal(resDkim.alignment.dkimAligned, true);
+    assert.equal(resDkim.alignment.dmarcAligned, true, 'DKIM pass + aligned domain + DMARC policy passes DMARC');
+    assert.equal(resDkim.alignment.dmarc, 'PASS');
+    assert.equal(resDkim.summary.alignmentResult, 'ALIGNED');
+  });
+
+  // 28. Reserved .example Domain (RFC 2606 / RFC 6761)
+  await t.test('28. Reserved .example test domain handled as DNS UNAVAILABLE', async () => {
+    // When no mock resolver fixture is provided, resolveTxt on .example must return UNAVAILABLE
+    const txtRes = await resolveTxt('paypal.example');
+    assert.equal(txtRes.status, 'UNAVAILABLE');
+    assert.ok(txtRes.error.includes('reserved example domain'));
+
+    const spfRes = await querySpfRecord('paypal.example');
+    assert.equal(spfRes.status, 'UNAVAILABLE');
+
+    const dmarcRes = await queryDmarcRecord('paypal.example');
+    assert.equal(dmarcRes.status, 'UNAVAILABLE');
+
+    const emailExample = `From: "Security" <alerts@service.example>
+Return-Path: <bounce@service.example>
+Subject: Test Alert
+
+Test message`;
+
+    const res = await analyzeEmailAuthentication(emailExample);
+    assert.equal(res.spf.status, 'UNAVAILABLE');
+    assert.equal(res.dmarc.status, 'UNAVAILABLE');
+    assert.equal(res.alignment.dmarcAligned, false);
+    assert.equal(res.summary.spfStatus, 'DNS UNAVAILABLE (.EXAMPLE)');
+    assert.equal(res.summary.dmarcStatus, 'DNS UNAVAILABLE (.EXAMPLE)');
+    assert.notEqual(res.summary.alignmentResult, 'ALIGNED');
+  });
+
 });

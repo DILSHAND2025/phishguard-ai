@@ -351,6 +351,21 @@ export async function querySpfRecord(domain, options = {}) {
   }
 
   const dnsResult = await resolveTxt(normDomain, options);
+  if (dnsResult.status === 'UNAVAILABLE') {
+    return {
+      domain: normDomain,
+      record: null,
+      status: 'UNAVAILABLE',
+      mechanisms: [],
+      defaultQualifier: 'none',
+      hasPlusAll: false,
+      allMechanism: null,
+      lookupCountEstimate: 0,
+      warnings: ['DNS verification unavailable for reserved example domain (.example)'],
+      rawRecords: []
+    };
+  }
+
   if (dnsResult.status === 'INVALID_DOMAIN' || dnsResult.status === 'ERROR' || dnsResult.status === 'TIMEOUT') {
     return {
       domain: normDomain,
@@ -508,6 +523,22 @@ export async function queryDkimRecord(selector, domain, options = {}) {
   const queryHost = `${cleanSelector}._domainkey.${normDomain}`;
   const dnsResult = await resolveTxt(queryHost, options);
 
+  if (dnsResult.status === 'UNAVAILABLE') {
+    return {
+      selector: cleanSelector,
+      domain: normDomain,
+      queryHost,
+      record: null,
+      status: 'UNAVAILABLE',
+      keyType: '',
+      publicKey: '',
+      keyLengthBits: null,
+      isRevoked: false,
+      warnings: ['DNS verification unavailable for reserved example domain (.example)'],
+      rawRecords: []
+    };
+  }
+
   if (dnsResult.status === 'NO_RECORDS' || dnsResult.status === 'NXDOMAIN') {
     return {
       selector: cleanSelector,
@@ -661,6 +692,25 @@ export async function queryDmarcRecord(domain, options = {}) {
   let isFallback = false;
   let dnsResult = await resolveTxt(hostToQuery, options);
 
+  if (dnsResult.status === 'UNAVAILABLE') {
+    return {
+      domain: normDomain,
+      queriedHost: hostToQuery,
+      record: null,
+      status: 'UNAVAILABLE',
+      policy: 'none',
+      subdomainPolicy: 'inherit',
+      adkim: 'r',
+      aspf: 'r',
+      percentage: 100,
+      rua: [],
+      ruf: [],
+      isOrgDomainFallback: false,
+      warnings: ['DNS verification unavailable for reserved example domain (.example)'],
+      rawRecords: []
+    };
+  }
+
   let dmarcRecords = (dnsResult.records || []).filter(r => /^v=DMARC1(\s*;|\s*$)/i.test(r.trim()));
 
   // Subdomain fallback to organizational domain if no DMARC record on subdomain
@@ -798,22 +848,35 @@ export async function queryDmarcRecord(domain, options = {}) {
 
 /**
  * Evaluates RFC 7489 Domain Alignment for SPF and DKIM against the Header From domain.
+ * Strictly distinguishes domain identifier alignment (syntactic matching) from
+ * genuine DMARC authentication pass (which requires a valid published DMARC policy
+ * AND passing authentication on an aligned protocol).
  * 
  * @param {Object} params
  * @param {string} params.fromDomain 
  * @param {string} params.returnPathDomain 
- * @param {string[]} params.dkimDomains 
+ * @param {string[]} [params.dkimDomains]
  * @param {'r' | 's'} [params.aspf='r']
  * @param {'r' | 's'} [params.adkim='r']
+ * @param {boolean} [params.spfAuthPass=false]
+ * @param {boolean} [params.dkimAuthPass=false]
+ * @param {boolean} [params.hasDmarcPolicy=false]
  * @returns {{
  *   spfAligned: boolean,
  *   dkimAligned: boolean,
+ *   spfIdentifierAligned: boolean,
+ *   dkimIdentifierAligned: boolean,
  *   spfAlignmentMode: 'strict' | 'relaxed',
  *   dkimAlignmentMode: 'strict' | 'relaxed',
  *   fromOrgDomain: string,
  *   returnPathOrgDomain: string,
  *   matchedDkimDomain: string | null,
- *   dmarcAligned: boolean
+ *   hasDmarcPolicy: boolean,
+ *   spfAuthPass: boolean,
+ *   dkimAuthPass: boolean,
+ *   dmarcAligned: boolean,
+ *   dmarcAuthenticated: boolean,
+ *   alignmentStatus: 'PASS' | 'FAIL' | 'UNENFORCED_NO_RECORD'
  * }}
  */
 export function analyzeDomainAlignment({
@@ -821,7 +884,10 @@ export function analyzeDomainAlignment({
   returnPathDomain,
   dkimDomains = [],
   aspf = 'r',
-  adkim = 'r'
+  adkim = 'r',
+  spfAuthPass = false,
+  dkimAuthPass = false,
+  hasDmarcPolicy = false
 }) {
   const normFrom = normalizeDomain(fromDomain);
   const normReturnPath = normalizeDomain(returnPathDomain);
@@ -864,15 +930,40 @@ export function analyzeDomainAlignment({
     }
   }
 
+  // RFC 7489 Section 4.2:
+  // DMARC passes ONLY IF:
+  // 1. A valid DMARC policy record is published for the From domain (hasDmarcPolicy)
+  // 2. AND at least one of SPF or DKIM BOTH passed authentication AND has identifier alignment:
+  //    (spfAuthPass && spfAligned) || (dkimAuthPass && dkimAligned)
+  const spfDmarcPass = Boolean(spfAuthPass && spfAligned);
+  const dkimDmarcPass = Boolean(dkimAuthPass && dkimAligned);
+  const dmarcAuthenticated = Boolean(hasDmarcPolicy && (spfDmarcPass || dkimDmarcPass));
+
+  let alignmentStatus = 'FAIL';
+  if (!hasDmarcPolicy) {
+    alignmentStatus = 'UNENFORCED_NO_RECORD';
+  } else if (dmarcAuthenticated) {
+    alignmentStatus = 'PASS';
+  } else {
+    alignmentStatus = 'FAIL';
+  }
+
   return {
     spfAligned,
     dkimAligned,
+    spfIdentifierAligned: spfAligned,
+    dkimIdentifierAligned: dkimAligned,
     spfAlignmentMode: aspf === 's' ? 'strict' : 'relaxed',
     dkimAlignmentMode: adkim === 's' ? 'strict' : 'relaxed',
     fromOrgDomain: fromOrg,
     returnPathOrgDomain: returnPathOrg,
     matchedDkimDomain,
-    dmarcAligned: spfAligned || dkimAligned
+    hasDmarcPolicy: Boolean(hasDmarcPolicy),
+    spfAuthPass: Boolean(spfAuthPass),
+    dkimAuthPass: Boolean(dkimAuthPass),
+    dmarcAligned: dmarcAuthenticated,
+    dmarcAuthenticated,
+    alignmentStatus
   };
 }
 
@@ -977,7 +1068,16 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
     dmarcDns = await queryDmarcRecord(fromDomain, { resolver: activeResolver });
   }
 
-  // 4. Domain Alignment Analysis
+  // 4. Extract Observed MTA Authentication Verdicts
+  const observedSpfVerdict = authResults.spf ? authResults.spf.verdict : (receivedSpfHeader ? receivedSpfHeader.verdict : 'none');
+  const observedDkimVerdict = authResults.dkim.length > 0 ? (authResults.dkim.some(d => d.verdict === 'pass') ? 'pass' : authResults.dkim[0].verdict) : 'none';
+  const observedDmarcVerdict = authResults.dmarc ? authResults.dmarc.verdict : 'none';
+
+  const spfAuthPass = (observedSpfVerdict === 'pass');
+  const dkimAuthPass = (observedDkimVerdict === 'pass');
+  const hasDmarcPolicy = Boolean(dmarcDns && dmarcDns.status === 'RECORD_FOUND');
+
+  // 5. Domain Alignment Analysis (RFC 7489)
   const dkimDomains = [
     ...dkimSignatures.map(s => s.domain),
     ...authResults.dkim.map(d => d.domain)
@@ -988,14 +1088,11 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
     returnPathDomain,
     dkimDomains,
     aspf: dmarcDns ? dmarcDns.aspf : 'r',
-    adkim: dmarcDns ? dmarcDns.adkim : 'r'
+    adkim: dmarcDns ? dmarcDns.adkim : 'r',
+    spfAuthPass,
+    dkimAuthPass,
+    hasDmarcPolicy
   });
-
-  // 5. Build OBSERVED EVIDENCE (Headers & Raw DNS Records)
-  // Strictly what was parsed from the email and DNS; NEVER inferred
-  const observedSpfVerdict = authResults.spf ? authResults.spf.verdict : (receivedSpfHeader ? receivedSpfHeader.verdict : 'none');
-  const observedDkimVerdict = authResults.dkim.length > 0 ? (authResults.dkim.some(d => d.verdict === 'pass') ? 'pass' : authResults.dkim[0].verdict) : 'none';
-  const observedDmarcVerdict = authResults.dmarc ? authResults.dmarc.verdict : 'none';
 
   const observedEvidence = {
     headers: {
@@ -1127,14 +1224,16 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
       authRiskScore += 15;
       inferredFindings.push(`DKIM public key record not found for selector '${dkimDns.selector}' at ${dkimDns.queryHost}.`);
     }
-  }
-
-  // E. DMARC Evaluation & Enforcement
+  }  // E. DMARC Evaluation & Enforcement
   let dmarcEffectiveStatus = 'PASS';
-  if (!dmarcDns || dmarcDns.status === 'NO_RECORD') {
-    dmarcEffectiveStatus = 'NO_POLICY';
+  if (!dmarcDns || dmarcDns.status === 'NO_RECORD' || dmarcDns.status === 'UNAVAILABLE') {
+    dmarcEffectiveStatus = dmarcDns?.status === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'NO_POLICY';
     authRiskScore += 10;
-    inferredFindings.push(`No DMARC policy published for ${fromDomain}; domain is vulnerable to spoofing.`);
+    if (dmarcDns?.status === 'UNAVAILABLE') {
+      inferredFindings.push(`DMARC DNS policy verification unavailable for reserved example domain (${fromDomain}).`);
+    } else {
+      inferredFindings.push(`No DMARC policy published for ${fromDomain}; domain is vulnerable to spoofing.`);
+    }
   } else if (dmarcDns.status === 'PERMERROR') {
     dmarcEffectiveStatus = 'PERMERROR';
     authRiskScore += 20;
@@ -1184,7 +1283,7 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
   const inferredEvidenceList = [
     `SPF Alignment: ${alignment.spfAligned ? 'ALIGNED' : 'MISALIGNED'} (${alignment.spfAlignmentMode} mode)`,
     `DKIM Alignment: ${alignment.dkimAligned ? 'ALIGNED' : 'MISALIGNED'} (${alignment.dkimAlignmentMode} mode)`,
-    `DMARC Alignment: ${alignment.dmarcAligned ? 'ALIGNED (SPF or DKIM)' : 'MISALIGNED'} (Effective status: ${dmarcEffectiveStatus})`,
+    `DMARC Alignment: ${alignment.dmarcAligned ? 'PASSED (RFC 7489 Verified)' : (!alignment.hasDmarcPolicy ? 'UNENFORCED (No DMARC Policy Record)' : 'FAILED')} (Effective status: ${dmarcEffectiveStatus})`,
     ...inferredFindings
   ];
 
@@ -1221,7 +1320,7 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
 
     spf: {
       status: spfDns?.status === 'RECORD_FOUND' ? 'RECORD_FOUND' : (spfDns?.status || 'NO_RECORD'),
-      displayStatus: spfDns?.status === 'RECORD_FOUND' ? 'SPF RECORD FOUND' : (spfDns?.status || 'NO RECORD'),
+      displayStatus: spfDns?.status === 'RECORD_FOUND' ? 'SPF RECORD FOUND' : (spfDns?.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : (spfDns?.status || 'NO RECORD')),
       domain: spfDomainToQuery,
       record: spfDns?.record || null,
       source: 'DNS',
@@ -1232,8 +1331,8 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
     },
 
     dkim: {
-      status: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'RECORD_FOUND' : dkimDnsResults[0].status) : 'NO_SIGNATURE',
-      displayStatus: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'DKIM PUBLIC KEY FOUND' : dkimDnsResults[0].status) : 'NO SIGNATURE',
+      status: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'RECORD_FOUND' : dkimDnsResults[0].status) : (primaryDkimResult?.status === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'NO_SIGNATURE'),
+      displayStatus: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'DKIM PUBLIC KEY FOUND' : (dkimDnsResults[0].status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : dkimDnsResults[0].status)) : (primaryDkimResult?.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : 'NO SIGNATURE'),
       domain: primaryDkimSig?.domain || primaryDkimResult?.domain || fromDomain,
       selector: primaryDkimSig?.selector || primaryDkimResult?.selector || '',
       dnsRecordFound: dkimDnsResults.some(d => d.status === 'RECORD_FOUND'),
@@ -1245,7 +1344,7 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
 
     dmarc: {
       status: dmarcDns?.status === 'RECORD_FOUND' ? 'RECORD_FOUND' : (dmarcDns?.status || 'NO_RECORD'),
-      displayStatus: dmarcDns?.status === 'RECORD_FOUND' ? 'DMARC RECORD FOUND' : (dmarcDns?.status || 'NO RECORD'),
+      displayStatus: dmarcDns?.status === 'RECORD_FOUND' ? 'DMARC RECORD FOUND' : (dmarcDns?.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : (dmarcDns?.status || 'NO RECORD')),
       domain: fromDomain,
       policy: dmarcDns?.policy || 'unknown',
       subdomainPolicy: dmarcDns?.subdomainPolicy || 'inherit',
@@ -1265,10 +1364,14 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
     alignment: {
       spf: alignment.spfAligned ? 'ALIGNED' : 'MISALIGNED',
       dkim: alignment.dkimAligned ? 'ALIGNED' : 'MISALIGNED',
-      dmarc: alignment.dmarcAligned ? 'PASS' : 'FAIL',
+      dmarc: alignment.dmarcAligned ? 'PASS' : (!alignment.hasDmarcPolicy ? 'UNENFORCED' : 'FAIL'),
       spfAligned: alignment.spfAligned,
       dkimAligned: alignment.dkimAligned,
       dmarcAligned: alignment.dmarcAligned,
+      hasDmarcPolicy: alignment.hasDmarcPolicy,
+      spfAuthPass: alignment.spfAuthPass,
+      dkimAuthPass: alignment.dkimAuthPass,
+      alignmentStatus: alignment.alignmentStatus,
       details: alignment
     },
 
@@ -1279,10 +1382,10 @@ export async function analyzeEmailAuthentication(rawEmail, options = {}) {
     riskSignals: inferredFindings,
 
     summary: {
-      spfStatus: spfDns ? (spfDns.status === 'RECORD_FOUND' ? 'SPF RECORD FOUND' : spfDns.status) : 'UNCHECKED',
-      dkimStatus: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'DKIM PUBLIC KEY FOUND' : dkimDnsResults[0].status) : 'NO SIGNATURE',
-      dmarcStatus: dmarcDns ? (dmarcDns.status === 'RECORD_FOUND' ? `DMARC RECORD FOUND (${dmarcDns.policy.toUpperCase()})` : dmarcDns.status) : 'NO_POLICY',
-      alignmentResult: alignment.dmarcAligned ? 'ALIGNED' : 'MISALIGNED',
+      spfStatus: spfDns ? (spfDns.status === 'RECORD_FOUND' ? 'SPF RECORD FOUND' : (spfDns.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : spfDns.status)) : 'UNCHECKED',
+      dkimStatus: dkimDnsResults.length > 0 ? (dkimDnsResults.some(d => d.status === 'RECORD_FOUND') ? 'DKIM PUBLIC KEY FOUND' : (dkimDnsResults[0].status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : dkimDnsResults[0].status)) : (primaryDkimResult?.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : 'NO SIGNATURE'),
+      dmarcStatus: dmarcDns ? (dmarcDns.status === 'RECORD_FOUND' ? `DMARC RECORD FOUND (${dmarcDns.policy.toUpperCase()})` : (dmarcDns.status === 'UNAVAILABLE' ? 'DNS UNAVAILABLE (.EXAMPLE)' : dmarcDns.status)) : 'NO_POLICY',
+      alignmentResult: alignment.dmarcAligned ? 'ALIGNED' : (!alignment.hasDmarcPolicy ? 'UNENFORCED' : 'MISALIGNED'),
       authRiskScore
     }
   };

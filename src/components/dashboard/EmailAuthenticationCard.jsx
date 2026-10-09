@@ -57,7 +57,7 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
         icon: CheckCircle2
       };
     }
-    if (s.includes('SOFTFAIL') || s.includes('NONE') || s.includes('NO_POLICY') || s.includes('REVOKED') || s.includes('UNVERIFIED') || s.includes('MISALIGNED')) {
+    if (s.includes('SOFTFAIL') || s.includes('NONE') || s.includes('NO_POLICY') || s.includes('REVOKED') || s.includes('UNVERIFIED') || s.includes('MISALIGNED') || s.includes('UNAVAILABLE') || s.includes('UNENFORCED') || s.includes('NO RECORD') || s.includes('NO SIGNATURE')) {
       return {
         bg: 'bg-amber-50',
         border: 'border-amber-200',
@@ -81,9 +81,10 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
   const DkimIcon = dkimBadge.icon;
   const DmarcIcon = dmarcBadge.icon;
 
-  const spfAligned = alignment?.spfAligned || alignment?.details?.spfAligned;
-  const dkimAligned = alignment?.dkimAligned || alignment?.details?.dkimAligned;
-  const dmarcAligned = alignment?.dmarcAligned || alignment?.details?.dmarcAligned;
+  const spfAligned = Boolean(alignment?.spfAligned || alignment?.details?.spfAligned);
+  const dkimAligned = Boolean(alignment?.dkimAligned || alignment?.details?.dkimAligned);
+  const hasDmarcPolicy = Boolean(alignment?.hasDmarcPolicy || alignment?.details?.hasDmarcPolicy || dmarc.status === 'RECORD_FOUND');
+  const dmarcAligned = Boolean(alignment?.dmarcAligned || alignment?.details?.dmarcAligned);
 
   return (
     <div className="rounded-xl bg-white border border-slate-200 p-5 sm:p-6 shadow-xs space-y-6 font-sans text-xs">
@@ -215,8 +216,10 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
 
               <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                 {spf.status === 'RECORD_FOUND'
-                  ? 'Valid SPF DNS record located.'
-                  : spf.status === 'PERMERROR'
+                  ? 'SPF DNS record located (presence does not cryptographically verify individual message without MTA pass).'
+                  : spf.status === 'UNAVAILABLE'
+                    ? 'DNS verification unavailable for reserved example domain (.example).'
+                    : spf.status === 'PERMERROR'
                     ? 'Multiple conflicting SPF records detected in DNS.'
                     : 'No valid SPF record published for envelope sender domain.'}
               </div>
@@ -282,8 +285,10 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
 
               <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                 {dkim.dnsRecordFound
-                  ? `DKIM public key found for selector "${dkim.selector || 's'}".`
-                  : 'DKIM signature missing or public key record not published.'}
+                  ? `DKIM public key published in DNS for selector "${dkim.selector || 's'}". (Cryptographic verification requires valid header signature).`
+                  : dkim.status === 'UNAVAILABLE'
+                    ? 'DNS verification unavailable for reserved example domain (.example).'
+                    : 'DKIM signature missing or public key record not published.'}
               </div>
             </div>
 
@@ -353,7 +358,9 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
               <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
                 {dmarc.status === 'RECORD_FOUND'
                   ? `DMARC record published with policy p=${dmarc.policy || 'none'}.`
-                  : 'No DMARC policy published; domain has no sender verification enforcement.'}
+                  : dmarc.status === 'UNAVAILABLE'
+                    ? 'DNS verification unavailable for reserved example domain (.example).'
+                    : 'No DMARC policy published; domain has no sender verification enforcement.'}
               </div>
             </div>
 
@@ -371,9 +378,19 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
               <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${
                 dmarcAligned
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : 'bg-red-50 border-red-200 text-red-700'
+                  : (!hasDmarcPolicy || dmarc.status === 'NO_RECORD' || dmarc.status === 'UNAVAILABLE')
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-red-50 border-red-200 text-red-700'
               }`}>
-                DMARC ALIGNMENT: {dmarcAligned ? 'PASSED' : 'FAILED'}
+                DMARC ALIGNMENT: {
+                  dmarcAligned
+                    ? 'PASSED'
+                    : dmarc.status === 'UNAVAILABLE'
+                      ? 'UNAVAILABLE (.EXAMPLE)'
+                      : (!hasDmarcPolicy || dmarc.status === 'NO_RECORD')
+                        ? 'UNENFORCED (NO RECORD)'
+                        : 'FAILED'
+                }
               </span>
             </div>
 
@@ -382,7 +399,7 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
               {/* SPF Alignment */}
               <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-semibold">SPF Alignment ({alignment?.spfMode || 'relaxed'})</span>
+                  <span className="text-slate-600 font-semibold">SPF Alignment ({alignment?.spfMode || alignment?.details?.spfAlignmentMode || 'relaxed'})</span>
                   <span className={`font-bold ${spfAligned ? 'text-emerald-700' : 'text-amber-700'}`}>
                     {spfAligned ? 'ALIGNED' : 'MISMATCH'}
                   </span>
@@ -390,13 +407,18 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
                 <div className="text-[11px] text-slate-500 space-y-0.5">
                   <div>From Domain: <strong className="text-slate-800">{fromDomain || 'None'}</strong></div>
                   <div>Return-Path Domain: <strong className="text-slate-800">{returnPathDomain || 'None'}</strong></div>
+                  <div className="text-[10px] text-slate-500 pt-0.5">
+                    MTA Verdict: <span className="font-semibold text-slate-700 uppercase">{mtaAuth?.observedSpfVerdict || 'none'}</span>
+                    {' • '}
+                    Auth Pass: <span className={alignment?.spfAuthPass || mtaAuth?.observedSpfVerdict === 'pass' ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>{alignment?.spfAuthPass || mtaAuth?.observedSpfVerdict === 'pass' ? 'YES' : 'NO'}</span>
+                  </div>
                 </div>
               </div>
 
               {/* DKIM Alignment */}
               <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-semibold">DKIM Alignment ({alignment?.dkimMode || 'relaxed'})</span>
+                  <span className="text-slate-600 font-semibold">DKIM Alignment ({alignment?.dkimMode || alignment?.details?.dkimAlignmentMode || 'relaxed'})</span>
                   <span className={`font-bold ${dkimAligned ? 'text-emerald-700' : 'text-amber-700'}`}>
                     {dkimAligned ? 'ALIGNED' : 'MISMATCH'}
                   </span>
@@ -404,6 +426,11 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
                 <div className="text-[11px] text-slate-500 space-y-0.5">
                   <div>From Domain: <strong className="text-slate-800">{fromDomain || 'None'}</strong></div>
                   <div>DKIM Signing Domain: <strong className="text-slate-800">{dkim.domain || 'None'}</strong></div>
+                  <div className="text-[10px] text-slate-500 pt-0.5">
+                    MTA Verdict: <span className="font-semibold text-slate-700 uppercase">{mtaAuth?.observedDkimVerdict || 'none'}</span>
+                    {' • '}
+                    Auth Pass: <span className={alignment?.dkimAuthPass || mtaAuth?.observedDkimVerdict === 'pass' ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>{alignment?.dkimAuthPass || mtaAuth?.observedDkimVerdict === 'pass' ? 'YES' : 'NO'}</span>
+                  </div>
                 </div>
               </div>
 
