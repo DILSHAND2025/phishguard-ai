@@ -21,7 +21,14 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
   // API Keys & Backend Gateway (stored locally for demo/client mode)
   const [vtApiKey, setVtApiKey] = useState(() => localStorage.getItem('maverick_vt_key') || '');
   const [abuseApiKey, setAbuseApiKey] = useState(() => localStorage.getItem('maverick_abuse_key') || '');
-  const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('maverick_backend_url') || '');
+  const [backendUrl, setBackendUrl] = useState(() => {
+    const saved = localStorage.getItem('maverick_backend_url') || '';
+    if (saved.includes('.vercel.app')) {
+      try { localStorage.removeItem('maverick_backend_url'); } catch {}
+      return '';
+    }
+    return saved;
+  });
   const [connectionStatus, setConnectionStatus] = useState(null); // null | 'testing' | 'success' | 'error'
   const [connectionMsg, setConnectionMsg] = useState('');
 
@@ -69,7 +76,12 @@ export const SettingsPage = ({ fusionWeights, onUpdateWeights }) => {
     }
     localStorage.setItem('maverick_vt_key', vtApiKey);
     localStorage.setItem('maverick_abuse_key', abuseApiKey);
-    localStorage.setItem('maverick_backend_url', backendUrl.trim());
+    const cleanBackend = backendUrl.trim();
+    if (cleanBackend.includes('.vercel.app')) {
+      localStorage.removeItem('maverick_backend_url');
+    } else {
+      localStorage.setItem('maverick_backend_url', cleanBackend);
+    }
     localStorage.setItem('maverick_weights', JSON.stringify(weights));
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);

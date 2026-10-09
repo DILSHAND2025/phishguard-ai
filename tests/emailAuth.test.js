@@ -53,6 +53,8 @@ import {
   getDnsCacheStats
 } from '../src/services/dnsService.js';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from '../src/services/evidenceFusion.js';
+import emailAuthHandler from '../api/email-authentication.js';
+import { getApiBaseUrl } from '../src/services/apiConfig.js';
 
 test('MAVERICK Live Email Authentication & DNS Forensics Suite', async (t) => {
 
@@ -613,6 +615,95 @@ Test message`;
     assert.equal(res.summary.spfStatus, 'DNS UNAVAILABLE (.EXAMPLE)');
     assert.equal(res.summary.dmarcStatus, 'DNS UNAVAILABLE (.EXAMPLE)');
     assert.notEqual(res.summary.alignmentResult, 'ALIGNED');
+  });
+
+  // =========================================================================
+  // 29. VERCEL SERVERLESS HANDLER: POST /api/email-authentication
+  // =========================================================================
+  await t.test('29. Serverless handler: processes POST /api/email-authentication successfully', async () => {
+    let statusCode = null;
+    let jsonResult = null;
+    const req = {
+      method: 'POST',
+      body: {
+        email: 'From: alerts@service.example\nReturn-Path: <bounce@service.example>\nSubject: Security Notice\n\nAccount login observed.'
+      }
+    };
+    const res = {
+      setHeader: () => {},
+      writeHead: (code) => { statusCode = code; },
+      end: (data) => { if (data) jsonResult = JSON.parse(data); },
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(data) {
+        jsonResult = data;
+        return this;
+      }
+    };
+
+    await emailAuthHandler(req, res);
+    assert.equal(statusCode, 200);
+    assert.equal(jsonResult.success, true);
+    assert.ok(jsonResult.status === 'SUCCESS' || jsonResult.status === 'COMPLETE');
+    assert.ok(jsonResult.spf, 'Response must include SPF forensics');
+    assert.ok(jsonResult.alignment, 'Response must include domain alignment analysis');
+  });
+
+  // =========================================================================
+  // 30. SERVERLESS HANDLER: REJECTS EMPTY/MISSING EMAIL PAYLOAD WITH 400
+  // =========================================================================
+  await t.test('30. Serverless handler: rejects empty email with HTTP 400 INVALID_INPUT', async () => {
+    let statusCode = null;
+    let jsonResult = null;
+    const req = {
+      method: 'POST',
+      body: {}
+    };
+    const res = {
+      setHeader: () => {},
+      writeHead: (code) => { statusCode = code; },
+      end: (data) => { if (data) jsonResult = JSON.parse(data); },
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(data) {
+        jsonResult = data;
+        return this;
+      }
+    };
+
+    await emailAuthHandler(req, res);
+    assert.equal(statusCode, 400);
+    assert.equal(jsonResult.success, false);
+    assert.equal(jsonResult.status, 'INVALID_INPUT');
+  });
+
+  // =========================================================================
+  // 31. API CONFIG: PURGES STALE VERCEL PREVIEW URL FROM LOCALSTORAGE
+  // =========================================================================
+  await t.test('31. getApiBaseUrl(): purges preview vercel.app URL and returns relative root', () => {
+    const mockStorage = new Map();
+    globalThis.window = {
+      location: { origin: 'https://phishguard-ai-mu-fawn.vercel.app', hostname: 'phishguard-ai-mu-fawn.vercel.app' },
+      localStorage: {
+        getItem: (k) => mockStorage.get(k) || null,
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k)
+      }
+    };
+
+    // Stale preview URL stored in localStorage
+    globalThis.window.localStorage.setItem('maverick_backend_url', 'https://phishguard-pwy5iycb8-dilshand2025.vercel.app');
+
+    const result = getApiBaseUrl();
+    assert.equal(result, '', 'Must return relative root empty string instead of stale preview URL');
+    assert.equal(globalThis.window.localStorage.getItem('maverick_backend_url'), null, 'Stale preview URL must be purged from localStorage');
+
+    // Clean up
+    delete globalThis.window;
   });
 
 });

@@ -19,36 +19,58 @@ function cleanUrl(url) {
 }
 
 export function getApiBaseUrl() {
-  // 1. User-configured custom gateway from Settings in localStorage
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = localStorage.getItem('maverick_backend_url');
-      if (saved && typeof saved === 'string' && saved.trim()) {
-        const cleaned = cleanUrl(saved);
-        if (typeof window !== 'undefined' && window.location && cleaned === window.location.origin) {
+  if (typeof window !== 'undefined') {
+    const currentOrigin = (window.location && window.location.origin) || '';
+
+    // 1. User-configured custom gateway from Settings in localStorage
+    try {
+      const storage = window.localStorage;
+      if (storage && typeof storage.getItem === 'function') {
+        const saved = storage.getItem('maverick_backend_url');
+        if (saved && typeof saved === 'string' && saved.trim()) {
+          const cleaned = cleanUrl(saved);
+
+          // If the stored URL is a temporary or stale vercel.app URL, purge it immediately
+          // to prevent routing to deprecated preview deployments.
+          if (cleaned.includes('.vercel.app')) {
+            try {
+              if (typeof storage.removeItem === 'function') {
+                storage.removeItem('maverick_backend_url');
+              }
+            } catch {
+              // ignore
+            }
+            return '';
+          }
+
+          // External backend (e.g. Render https://*.onrender.com)
+          if (cleaned && cleaned !== currentOrigin) {
+            return cleaned;
+          }
           return '';
         }
-        return cleaned;
       }
+    } catch {
+      // ignore localStorage errors
     }
-  } catch {
-    // ignore localStorage errors
+
+    // 2. Vite / Process Environment Variable (configured in Vercel / .env)
+    const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
+                   (typeof process !== 'undefined' && process.env?.VITE_API_URL);
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+      const cleaned = cleanUrl(envUrl);
+      // If VITE_API_URL points to any .vercel.app domain or current origin, use relative paths
+      if (cleaned.includes('.vercel.app') || cleaned === currentOrigin) {
+        return '';
+      }
+      return cleaned;
+    }
+
+    // 3. Browser default: relative root (same domain as frontend)
+    // Co-deployed Vercel serverless functions are accessed via /api/*
+    return '';
   }
 
-  // 2. Vite / Process Environment Variable (configured in Vercel / .env)
-  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
-                 (typeof process !== 'undefined' && process.env?.VITE_API_URL);
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    const cleaned = cleanUrl(envUrl);
-    if (typeof window !== 'undefined' && window.location && cleaned === window.location.origin) {
-      return '';
-    }
-    return cleaned;
-  }
-
-  // 3. Fallback
-  if (typeof window !== 'undefined') {
-    return ''; // relative root, works with Vite proxy or same-domain
-  }
+  // 4. Server-side fallback
   return 'http://localhost:5000';
 }

@@ -317,8 +317,8 @@ function App() {
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
         const authEndpoints = [
-          apiBase ? `${apiBase}/api/email-authentication` : '',
           '/api/email-authentication',
+          apiBase ? `${apiBase}/api/email-authentication` : '',
           ...(isLocalHost ? [
             'http://localhost:5000/api/email-authentication',
             'http://127.0.0.1:5000/api/email-authentication'
