@@ -379,6 +379,53 @@ function App() {
     }
   }, [fusionWeights]);
 
+  // Handle retrying case persistence if the initial save failed
+  const handleRetrySaveCase = useCallback(async () => {
+    if (!currentAnalysis) return { success: false, error: 'No active analysis to save' };
+    try {
+      const saveRes = await persistCaseInvestigation({
+        email: currentAnalysis.email,
+        fusion: currentAnalysis.fusion,
+        aiThreat: currentAnalysis.aiThreat,
+        iocs: currentAnalysis.iocs,
+        geoInfo: currentAnalysis.geoInfo,
+        geoList: currentAnalysis.geoList,
+        emailAuth: currentAnalysis.emailAuth,
+        campaign: currentAnalysis.campaign,
+        originalFilename: currentAnalysis.email?.filename,
+        rawContent: currentAnalysis.email?.rawSnippet || ''
+      });
+
+      if (saveRes.success) {
+        const updatedCase = {
+          ...currentAnalysis.caseItem,
+          caseId: saveRes.caseId,
+          id: saveRes.case?.id,
+          isDuplicate: saveRes.isDuplicate,
+          isSaved: true,
+          saveError: null
+        };
+        const updatedAnalysis = {
+          ...currentAnalysis,
+          caseItem: updatedCase,
+          caseId: saveRes.caseId,
+          isSaved: true,
+          dbSaveError: null
+        };
+        setCurrentAnalysis(updatedAnalysis);
+        setSelectedCase(updatedCase);
+        return { success: true, caseId: saveRes.caseId };
+      } else {
+        const err = saveRes.error || 'Database persistence failed';
+        setCurrentAnalysis(prev => ({ ...prev, dbSaveError: err }));
+        return { success: false, error: err };
+      }
+    } catch (err) {
+      setCurrentAnalysis(prev => ({ ...prev, dbSaveError: err.message }));
+      return { success: false, error: err.message };
+    }
+  }, [currentAnalysis]);
+
   // Handle opening an existing case from PostgreSQL without re-running analysis (Requirement 16)
   const handleOpenCase = useCallback(async (caseItemOrId) => {
     let fullCase = null;
@@ -497,6 +544,7 @@ function App() {
             onViewChange={handleViewChange}
             currentAnalysis={currentAnalysis}
             onRunAnalysis={runFullAnalysis}
+            onRetrySave={handleRetrySaveCase}
           />
         );
       case 'security-analyzer':
@@ -506,6 +554,7 @@ function App() {
             currentAnalysis={currentAnalysis}
             onViewChange={handleViewChange}
             onRunAnalysis={runFullAnalysis}
+            onRetrySave={handleRetrySaveCase}
           />
         );
       case 'ioc-intel':

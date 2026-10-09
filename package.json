@@ -14,7 +14,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
-    "build": "vite build",
+    "build": "prisma generate && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },

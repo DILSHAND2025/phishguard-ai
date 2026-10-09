@@ -12,6 +12,8 @@ export const IncidentQueueTable = ({ onViewChange, onSelectCase }) => {
   const [cases, setCases] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isDbUnavailable, setIsDbUnavailable] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -21,6 +23,8 @@ export const IncidentQueueTable = ({ onViewChange, onSelectCase }) => {
       if (mounted) {
         setCases(res.cases || []);
         setTotal(res.total || 0);
+        setIsDbUnavailable(Boolean(res.isDbUnavailable));
+        setError(res.error || null);
         setLoading(false);
       }
     }
@@ -39,8 +43,12 @@ export const IncidentQueueTable = ({ onViewChange, onSelectCase }) => {
             <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-900">
               Active SOC Investigation Queue
             </h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-50 border border-cyan-200 text-cyan-700 font-bold">
-              {total} Active
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
+              isDbUnavailable
+                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                : 'bg-cyan-50 border-cyan-200 text-cyan-700'
+            }`}>
+              {isDbUnavailable ? 'Offline' : `${total} Active`}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -61,6 +69,14 @@ export const IncidentQueueTable = ({ onViewChange, onSelectCase }) => {
         <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-2">
           <RefreshCw className="w-5 h-5 text-cyan-600 animate-spin mx-auto" />
           <p>Querying persistent case database...</p>
+        </div>
+      ) : isDbUnavailable ? (
+        <div className="py-8 text-center text-xs text-amber-700 bg-amber-50/60 rounded-xl border border-amber-200 p-4 space-y-2">
+          <ShieldAlert className="w-6 h-6 text-amber-600 mx-auto" />
+          <p className="font-semibold text-amber-900">Database Gateway Unreachable</p>
+          <p className="text-[11px] text-amber-800">
+            {error || 'Unable to connect to database gateway. Set DATABASE_URL or configure VITE_API_URL.'}
+          </p>
         </div>
       ) : cases.length === 0 ? (
         <div className="py-10 text-center text-xs text-slate-500 space-y-2">

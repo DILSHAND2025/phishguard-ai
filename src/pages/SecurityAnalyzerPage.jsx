@@ -24,7 +24,8 @@ import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilde
 export const SecurityAnalyzerPage = ({ 
   currentAnalysis, 
   onViewChange, 
-  _onRunAnalysis 
+  _onRunAnalysis,
+  onRetrySave
 }) => {
   // State toggles
   const [showRawHeaders, setShowRawHeaders] = useState(false);
@@ -33,6 +34,7 @@ export const SecurityAnalyzerPage = ({
   const [activeIocTab, setActiveIocTab] = useState('ALL');
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingJson, setExportingJson] = useState(false);
+  const [isRetryingSave, setIsRetryingSave] = useState(false);
 
   // If no analysis is loaded yet, provide a clean empty state with action to start one
   if (!currentAnalysis || !currentAnalysis.email) {
@@ -236,13 +238,30 @@ export const SecurityAnalyzerPage = ({
 
       {/* Database Persistence Failure Alert */}
       {currentAnalysis.dbSaveError && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-semibold text-amber-900">Persistence Notice</div>
-            <p>Analysis completed, but the case could not be saved to PostgreSQL.</p>
-            <p className="text-[11px] text-amber-700 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="font-semibold text-amber-900">Persistence Notice</div>
+              <p>Analysis completed, but the case could not be saved to PostgreSQL.</p>
+              <p className="text-[11px] text-amber-700 font-mono mt-0.5">Reason: {currentAnalysis.dbSaveError}</p>
+            </div>
           </div>
+          {onRetrySave && (
+            <button
+              type="button"
+              onClick={async () => {
+                setIsRetryingSave(true);
+                await onRetrySave();
+                setIsRetryingSave(false);
+              }}
+              disabled={isRetryingSave}
+              className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs self-start sm:self-auto"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetryingSave ? 'animate-spin' : ''}`} />
+              <span>{isRetryingSave ? 'Saving to Database...' : 'Retry Saving Case'}</span>
+            </button>
+          )}
         </div>
       )}
 

@@ -39,6 +39,10 @@ import {
 import { getThreatPriority, getPriorityStyle } from '../src/services/priorityHelper.js';
 import { generateCaseId, buildForensicReport } from '../src/services/forensicReportService.js';
 import { server } from '../server/server.js';
+import casesHandler from '../api/cases/index.js';
+import statsHandler from '../api/cases/stats.js';
+import caseItemHandler from '../api/cases/[caseId].js';
+import healthHandler from '../api/health.js';
 
 test('MAVERICK Persistent Email Case Database & Priority Queue Suite', async (t) => {
 
@@ -454,6 +458,256 @@ test('MAVERICK Persistent Email Case Database & Priority Queue Suite', async (t)
       assert.equal(statsData.totalCases, 1); // 1 active remaining
     } finally {
       await new Promise(resolve => testServer.close(resolve));
+    }
+  });
+
+  // =========================================================================
+  // 19. HTTP 405 METHOD NOT ALLOWED ON UNSUPPORTED METHODS
+  // =========================================================================
+  await t.test('19. HTTP 405 Method Not Allowed handling on unsupported methods', async () => {
+    const testServer = http.createServer(server.listeners('request')[0]);
+    await new Promise(resolve => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      // 1. PUT /api/cases -> 405
+      const putRes = await fetch(`${baseUrl}/api/cases`, { method: 'PUT' });
+      assert.equal(putRes.status, 405);
+      assert.equal(putRes.headers.get('allow'), 'GET, POST, OPTIONS');
+
+      // 2. DELETE /api/cases -> 405
+      const delRes = await fetch(`${baseUrl}/api/cases`, { method: 'DELETE' });
+      assert.equal(delRes.status, 405);
+
+      // 3. POST /api/cases/stats -> 405
+      const postStatsRes = await fetch(`${baseUrl}/api/cases/stats`, { method: 'POST' });
+      assert.equal(postStatsRes.status, 405);
+      assert.equal(postStatsRes.headers.get('allow'), 'GET, OPTIONS');
+
+      // 4. POST /api/health -> 405
+      const postHealthRes = await fetch(`${baseUrl}/api/health`, { method: 'POST' });
+      assert.equal(postHealthRes.status, 405);
+      assert.equal(postHealthRes.headers.get('allow'), 'GET, OPTIONS');
+
+      // 5. POST /api/cases/:caseId -> 405
+      const postCaseIdRes = await fetch(`${baseUrl}/api/cases/MAV-2026-TESTCASE`, { method: 'POST' });
+      assert.equal(postCaseIdRes.status, 405);
+      assert.equal(postCaseIdRes.headers.get('allow'), 'GET, PATCH, OPTIONS');
+    } finally {
+      await new Promise(resolve => testServer.close(resolve));
+    }
+  });
+
+  // =========================================================================
+  // 20. TRAILING SLASH NORMALIZATION
+  // =========================================================================
+  await t.test('20. Trailing slash normalization: handles trailing slashes without 404 or 405', async () => {
+    const testServer = http.createServer(server.listeners('request')[0]);
+    await new Promise(resolve => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      // POST /api/cases/
+      const postRes = await fetch(`${baseUrl}/api/cases/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: { subject: 'Trailing Slash Post', sender: 'trail@slash.io' },
+          fusion: { threatScore: 77 },
+          rawContent: 'trail-post-1'
+        })
+      });
+      assert.equal(postRes.status, 201);
+      const postData = await postRes.json();
+      assert.ok(postData.caseId);
+
+      // GET /api/cases/
+      const getRes = await fetch(`${baseUrl}/api/cases/`);
+      assert.equal(getRes.status, 200);
+
+      // GET /api/cases/stats/
+      const statsRes = await fetch(`${baseUrl}/api/cases/stats/`);
+      assert.equal(statsRes.status, 200);
+
+      // GET /api/health/
+      const healthRes = await fetch(`${baseUrl}/api/health/`);
+      assert.equal(healthRes.status, 200);
+
+      // GET /api/cases/:caseId/
+      const singleRes = await fetch(`${baseUrl}/api/cases/${postData.caseId}/`);
+      assert.equal(singleRes.status, 200);
+    } finally {
+      await new Promise(resolve => testServer.close(resolve));
+    }
+  });
+
+  // =========================================================================
+  // 21. DATABASE UNAVAILABLE HTTP 503 ERROR HANDLING
+  // =========================================================================
+  await t.test('21. Database unavailable: HTTP gateway returns 503 Service Unavailable', async () => {
+    resetTestStore();
+    const origUrl = process.env.DATABASE_URL;
+    delete process.env.DATABASE_URL;
+
+    const testServer = http.createServer(server.listeners('request')[0]);
+    await new Promise(resolve => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      // POST /api/cases when DB unavailable
+      const postRes = await fetch(`${baseUrl}/api/cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: { subject: 'Offline Case', sender: 'offline@db.io' },
+          fusion: { threatScore: 80 }
+        })
+      });
+      assert.equal(postRes.status, 503);
+      const postData = await postRes.json();
+      assert.equal(postData.success, false);
+      assert.equal(postData.status, 'DB_UNAVAILABLE');
+
+      // GET /api/cases when DB unavailable
+      const getRes = await fetch(`${baseUrl}/api/cases`);
+      assert.equal(getRes.status, 503);
+      const getData = await getRes.json();
+      assert.equal(getData.success, false);
+
+      // GET /api/cases/stats when DB unavailable
+      const statsRes = await fetch(`${baseUrl}/api/cases/stats`);
+      assert.equal(statsRes.status, 503);
+    } finally {
+      process.env.DATABASE_URL = origUrl;
+      setTestStore(mockStore);
+      await new Promise(resolve => testServer.close(resolve));
+    }
+  });
+
+  // =========================================================================
+  // 22. VERCEL SERVERLESS FUNCTION HANDLERS VERIFICATION
+  // =========================================================================
+  await t.test('22. Vercel serverless handlers: support GET, POST, OPTIONS and reject others with 405', async () => {
+    // Helper to mock Vercel req/res
+    function createMockRes() {
+      const headers = {};
+      let statusCode = 200;
+      let bodyData = null;
+      return {
+        statusCode,
+        setHeader(k, v) { headers[k.toLowerCase()] = v; },
+        getHeader(k) { return headers[k.toLowerCase()]; },
+        status(code) { statusCode = code; this.statusCode = code; return this; },
+        json(data) { bodyData = data; return this; },
+        end(data) { if (data) bodyData = data; return this; },
+        writeHead(code, h = {}) {
+          statusCode = code;
+          this.statusCode = code;
+          for (const [k, v] of Object.entries(h)) headers[k.toLowerCase()] = v;
+          return this;
+        },
+        _getData: () => bodyData,
+        _getStatus: () => statusCode,
+        _getHeader: (k) => headers[k.toLowerCase()]
+      };
+    }
+
+    // 1. Health handler
+    const healthRes = createMockRes();
+    await healthHandler({ method: 'GET' }, healthRes);
+    assert.equal(healthRes._getStatus(), 200);
+    assert.equal(healthRes._getHeader('access-control-allow-origin'), '*');
+
+    // Health handler 405 on POST
+    const healthPostRes = createMockRes();
+    await healthHandler({ method: 'POST' }, healthPostRes);
+    assert.equal(healthPostRes._getStatus(), 405);
+
+    // 2. Cases handler OPTIONS
+    const optRes = createMockRes();
+    await casesHandler({ method: 'OPTIONS' }, optRes);
+    assert.equal(optRes._getStatus(), 204);
+
+    // 3. Cases handler POST
+    const postRes = createMockRes();
+    await casesHandler({
+      method: 'POST',
+      body: {
+        email: { subject: 'Serverless Case', sender: 'test@serverless.io' },
+        fusion: { threatScore: 84 },
+        rawContent: 'serverless-content-1'
+      }
+    }, postRes);
+    assert.equal(postRes._getStatus(), 201);
+    const postData = postRes._getData();
+    assert.ok(postData.caseId);
+
+    // 4. Cases handler GET
+    const getRes = createMockRes();
+    await casesHandler({ method: 'GET', query: {} }, getRes);
+    assert.equal(getRes._getStatus(), 200);
+    const casesData = getRes._getData();
+    assert.ok(Array.isArray(casesData));
+    assert.equal(casesData[0].threatScore, 84);
+
+    // 5. Cases handler 405 on PUT
+    const putRes = createMockRes();
+    await casesHandler({ method: 'PUT' }, putRes);
+    assert.equal(putRes._getStatus(), 405);
+
+    // 6. Stats handler GET
+    const statsRes = createMockRes();
+    await statsHandler({ method: 'GET' }, statsRes);
+    assert.equal(statsRes._getStatus(), 200);
+
+    // 7. Case item handler GET & PATCH
+    const itemGetRes = createMockRes();
+    await caseItemHandler({ method: 'GET', query: { caseId: postData.caseId } }, itemGetRes);
+    assert.equal(itemGetRes._getStatus(), 200);
+    assert.equal(itemGetRes._getData().caseId, postData.caseId);
+
+    const itemPatchRes = createMockRes();
+    await caseItemHandler({ method: 'PATCH', query: { caseId: postData.caseId }, body: { status: 'archived' } }, itemPatchRes);
+    assert.equal(itemPatchRes._getStatus(), 200);
+    assert.equal(itemPatchRes._getData().case.status, 'archived');
+  });
+
+  // =========================================================================
+  // 23. FRONTEND FAILURE HANDLING: HTTP 405 & PRESERVATION OF ANALYSIS
+  // =========================================================================
+  await t.test('23. Frontend failure handling: 405 gracefully flags DB unavailable and preserves analysis', async () => {
+    // Start mock server simulating Vercel static rewrite returning 405 HTML
+    const mockVercelServer = http.createServer((req, res) => {
+      res.writeHead(405, { 'Content-Type': 'text/html' });
+      res.end('<html><head><title>405 Method Not Allowed</title></head><body><h1>405 Method Not Allowed</h1></body></html>');
+    });
+    await new Promise(resolve => mockVercelServer.listen(0, resolve));
+    const port = mockVercelServer.address().port;
+    const badUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const postRes = await fetch(`${badUrl}/api/cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: { subject: 'Test 405' } })
+      });
+      assert.equal(postRes.status, 405);
+
+      // Verify analysis data is strictly preserved and never marked as saved
+      const sampleAnalysis = {
+        email: { subject: 'Critical Spearphish', sender: 'attacker@evil.org' },
+        fusion: { threatScore: 91, riskLevel: 'CRITICAL' },
+        caseItem: { caseId: 'MAV-2026-PERSIST1', isSaved: false, saveError: 'HTTP 405' }
+      };
+
+      assert.equal(sampleAnalysis.caseItem.isSaved, false, 'Failed save must NEVER mark case as saved');
+      assert.equal(sampleAnalysis.fusion.threatScore, 91, 'Threat assessment must remain completely intact');
+      assert.ok(sampleAnalysis.caseItem.saveError);
+    } finally {
+      await new Promise(resolve => mockVercelServer.close(resolve));
     }
   });
 

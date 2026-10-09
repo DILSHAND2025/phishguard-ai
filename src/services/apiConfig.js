@@ -9,13 +9,26 @@
  * - Localhost development (Vite proxy / port 5000)
  */
 
+function cleanUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  let cleaned = url.trim().replace(/\/+$/, '');
+  if (cleaned.endsWith('/api')) {
+    cleaned = cleaned.slice(0, -4).replace(/\/+$/, '');
+  }
+  return cleaned;
+}
+
 export function getApiBaseUrl() {
   // 1. User-configured custom gateway from Settings in localStorage
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const saved = localStorage.getItem('maverick_backend_url');
       if (saved && typeof saved === 'string' && saved.trim()) {
-        return saved.trim().replace(/\/$/, '');
+        const cleaned = cleanUrl(saved);
+        if (typeof window !== 'undefined' && window.location && cleaned === window.location.origin) {
+          return '';
+        }
+        return cleaned;
       }
     }
   } catch {
@@ -26,7 +39,11 @@ export function getApiBaseUrl() {
   const envUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
                  (typeof process !== 'undefined' && process.env?.VITE_API_URL);
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    return envUrl.trim().replace(/\/$/, '');
+    const cleaned = cleanUrl(envUrl);
+    if (typeof window !== 'undefined' && window.location && cleaned === window.location.origin) {
+      return '';
+    }
+    return cleaned;
   }
 
   // 3. Fallback

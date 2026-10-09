@@ -68,8 +68,33 @@ export async function fetchCases({
       };
     }
 
+    if (res.status === 405) {
+      return {
+        cases: [],
+        total: 0,
+        page: 1,
+        limit,
+        totalPages: 1,
+        isDbUnavailable: true,
+        error: 'Gateway routing error: HTTP 405 Method Not Allowed. Backend route does not support this method.'
+      };
+    }
+
+    const contentType = res.headers.get('content-type') || '';
     if (!res.ok) {
       throw new Error(`Failed to load cases: HTTP ${res.status}`);
+    }
+
+    if (!contentType.includes('application/json')) {
+      return {
+        cases: [],
+        total: 0,
+        page: 1,
+        limit,
+        totalPages: 1,
+        isDbUnavailable: true,
+        error: 'Unable to connect to database gateway (server returned non-JSON response).'
+      };
     }
 
     const data = await res.json();
@@ -184,12 +209,31 @@ export async function persistCaseInvestigation(analysisResult) {
       };
     }
 
+    if (res.status === 405) {
+      return {
+        success: false,
+        isDbUnavailable: true,
+        error: 'Failed to save case (HTTP 405 Method Not Allowed). The backend route does not support POST or static rewrite captured the request.'
+      };
+    }
+
+    const contentType = res.headers.get('content-type') || '';
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
+      const errBody = contentType.includes('application/json')
+        ? await res.json().catch(() => ({}))
+        : {};
       return {
         success: false,
         isDbUnavailable: res.status >= 500,
         error: errBody.error || `Failed to save case (HTTP ${res.status})`
+      };
+    }
+
+    if (!contentType.includes('application/json')) {
+      return {
+        success: false,
+        isDbUnavailable: true,
+        error: 'Failed to save case: Server returned non-JSON response instead of case confirmation.'
       };
     }
 
@@ -244,7 +288,7 @@ export async function archiveCase(caseId, status = 'archived') {
 /**
  * Fetches aggregated case statistics from real database data
  * 
- * @returns {Promise<{ totalCases: number, critical: number, high: number, medium: number, low: number, topThreats: Array }>}
+ * @returns {Promise<{ totalCases: number, critical: number, high: number, medium: number, low: number, topThreats: Array, isDbUnavailable?: boolean }>}
  */
 export async function fetchCaseStats() {
   const baseUrl = getApiBaseUrl();
@@ -257,7 +301,11 @@ export async function fetchCaseStats() {
     });
 
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      return {
+        ...data,
+        isDbUnavailable: false
+      };
     }
     return {
       totalCases: 0,
@@ -265,7 +313,8 @@ export async function fetchCaseStats() {
       high: 0,
       medium: 0,
       low: 0,
-      topThreats: []
+      topThreats: [],
+      isDbUnavailable: true
     };
   } catch (err) {
     console.warn('[MAVERICK CaseStore] fetchCaseStats failed:', err.message);
@@ -275,7 +324,8 @@ export async function fetchCaseStats() {
       high: 0,
       medium: 0,
       low: 0,
-      topThreats: []
+      topThreats: [],
+      isDbUnavailable: true
     };
   }
 }

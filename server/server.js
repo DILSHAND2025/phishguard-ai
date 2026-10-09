@@ -104,11 +104,17 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
+  const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const rawPath = reqUrl.pathname;
+  const pathname = (rawPath.length > 1 && rawPath.endsWith('/')) ? rawPath.slice(0, -1) : rawPath;
+  const query = Object.fromEntries(reqUrl.searchParams.entries());
+  const parsedUrl = { pathname, query };
 
   // Root and Health check
   if (pathname === '/' || pathname === '/health' || pathname === '/api/health') {
+    if (req.method !== 'GET') {
+      return sendJson(res, 405, { success: false, error: 'Method Not Allowed' }, { 'Allow': 'GET, OPTIONS' });
+    }
     const dbActive = await isDatabaseAvailable();
     return sendJson(res, 200, {
       status: 'online',
@@ -728,7 +734,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Case Management Statistics Endpoint: GET /api/cases/stats
-  if (pathname === '/api/cases/stats' && req.method === 'GET') {
+  if (pathname === '/api/cases/stats') {
+    if (req.method !== 'GET') {
+      return sendJson(res, 405, { success: false, error: 'Method Not Allowed' }, { 'Allow': 'GET, OPTIONS' });
+    }
     try {
       const stats = await getCaseStats();
       return sendJson(res, 200, stats);
@@ -808,6 +817,8 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+
+    return sendJson(res, 405, { success: false, error: 'Method Not Allowed' }, { 'Allow': 'GET, POST, OPTIONS' });
   }
 
   // Single Case Endpoint: GET /api/cases/:caseId & PATCH /api/cases/:caseId
@@ -860,6 +871,8 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+
+    return sendJson(res, 405, { success: false, error: 'Method Not Allowed' }, { 'Allow': 'GET, PATCH, OPTIONS' });
   }
 
   // Fallback 404

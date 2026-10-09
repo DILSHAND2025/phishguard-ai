@@ -55,10 +55,14 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
                 <span>SYSTEM ACTIVE</span>
               </span>
               <span className="text-xs text-slate-500 font-mono">
-                Case DB: <strong className="text-emerald-700 font-semibold">PostgreSQL Active</strong>
+                Case DB: {dbStats.isDbUnavailable ? (
+                  <strong className="text-amber-700 font-semibold">Gateway Unreachable</strong>
+                ) : (
+                  <strong className="text-emerald-700 font-semibold">PostgreSQL Active</strong>
+                )}
               </span>
-              <span className="text-xs text-slate-400 font-mono">
-                • {dbStats.totalCases} Persistent Cases
+              <span className={`text-xs font-mono ${dbStats.isDbUnavailable ? 'text-amber-600' : 'text-slate-400'}`}>
+                • {dbStats.isDbUnavailable ? 'Persistence Offline' : `${dbStats.totalCases} Persistent Cases`}
               </span>
             </div>
 
