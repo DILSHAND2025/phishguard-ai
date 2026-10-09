@@ -88,9 +88,11 @@ export function extractTextualIndicators(rawText) {
   return matchedIndicators;
 }
 
+export const DEFAULT_PROD_ML_URL = 'https://phishguard-ai-ygzu.onrender.com/predict';
+
 /**
  * Query real Machine Learning Prediction Endpoint
- * Supports FastAPI microservice (port 8000) and backend gateway proxy (/api/ml/predict, /predict).
+ * Supports FastAPI microservice (port 8000), production Render microservice, and backend gateway proxy (/api/ml/predict, /api/predict).
  */
 export async function queryMLPrediction(text) {
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -114,11 +116,14 @@ export async function queryMLPrediction(text) {
 
   const endpoints = [
     customMlUrl ? `${customMlUrl.replace(/\/+$/, '')}/predict` : '',
-    baseUrl ? `${baseUrl}/api/ml/predict` : '',
+    // In browser, try relative Vercel API proxy routes first
+    typeof window !== 'undefined' ? '/api/predict' : '',
+    typeof window !== 'undefined' ? '/api/ml/predict' : '',
+    // Direct production microservice endpoint
+    DEFAULT_PROD_ML_URL,
+    // Base URL proxy fallback (if explicitly configured)
     baseUrl ? `${baseUrl}/api/predict` : '',
-    baseUrl ? `${baseUrl}/predict` : '',
-    '/api/ml/predict',
-    '/api/predict',
+    baseUrl ? `${baseUrl}/api/ml/predict` : '',
     isLocalhost ? 'http://127.0.0.1:8000/predict' : ''
   ].filter(Boolean);
 
@@ -128,7 +133,7 @@ export async function queryMLPrediction(text) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+        signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined
       });
       if (res.ok) {
         const data = await res.json();

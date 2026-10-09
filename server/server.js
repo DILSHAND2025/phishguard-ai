@@ -47,7 +47,7 @@ const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
 const ABUSE_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
 const PYTHON_CMD = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
-const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000').trim().replace(/\/+$/, '');
+const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'https://phishguard-ai-ygzu.onrender.com').trim().replace(/\/+$/, '');
 
 const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 

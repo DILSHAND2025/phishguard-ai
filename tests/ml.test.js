@@ -245,17 +245,80 @@ Visit http://secure-internal-update.online/auth-portal/wire-release now.`;
     await predictHandler({ method: 'POST', body: { text: '' } }, emptyPostRes);
     assert.equal(emptyPostRes._getStatus(), 400);
 
-    // 4. POST without ML_SERVICE_URL -> 503 UNAVAILABLE
+    // 4. POST with disabled ML_SERVICE_URL -> 503 UNAVAILABLE
     const origMlUrl = process.env.ML_SERVICE_URL;
-    delete process.env.ML_SERVICE_URL;
+    process.env.ML_SERVICE_URL = 'disabled';
     try {
-      const noServiceRes = createMockRes();
-      await predictHandler({ method: 'POST', body: { text: 'Test text' } }, noServiceRes);
-      assert.equal(noServiceRes._getStatus(), 503);
-      assert.equal(noServiceRes._getData().prediction, 'UNAVAILABLE');
+      const disabledRes = createMockRes();
+      await predictHandler({ method: 'POST', body: { text: 'Test text' } }, disabledRes);
+      assert.equal(disabledRes._getStatus(), 503);
+      assert.equal(disabledRes._getData().prediction, 'UNAVAILABLE');
     } finally {
       if (origMlUrl) process.env.ML_SERVICE_URL = origMlUrl;
+      else delete process.env.ML_SERVICE_URL;
     }
+
+    // 5. POST proxying to production ML endpoint -> 200 SUCCESS with full confirmed schema
+    const prodRes = createMockRes();
+    await predictHandler({
+      method: 'POST',
+      body: { text: 'Dear user, your account is suspended. Click here immediately to verify your password.' }
+    }, prodRes);
+    assert.equal(prodRes._getStatus(), 200);
+    const prodData = prodRes._getData();
+    assert.equal(prodData.prediction, 'phishing');
+    assert.equal(typeof prodData.phishing_probability, 'number');
+    assert.equal(typeof prodData.legitimate_probability, 'number');
+    assert.ok(prodData.phishing_probability > 0.8, 'High phishing probability');
+    assert.equal(prodData.model, 'TF-IDF + Logistic Regression');
+    assert.ok(Array.isArray(prodData.top_features), 'top_features array returned');
+    assert.ok(prodData.top_features.length > 0, 'Top features populated');
+    assert.equal(prodData.status, 'SUCCESS');
+
+    // 6. Explicitly configured process.env.ML_SERVICE_URL forwarding verification
+    const customMlUrl = 'https://phishguard-ai-ygzu.onrender.com';
+    process.env.ML_SERVICE_URL = customMlUrl;
+    try {
+      const explicitRes = createMockRes();
+      await predictHandler({
+        method: 'POST',
+        body: { text: 'Account verification required immediately.' }
+      }, explicitRes);
+      assert.equal(explicitRes._getStatus(), 200);
+      assert.equal(explicitRes._getData().status, 'SUCCESS');
+      assert.equal(explicitRes._getData().model, 'TF-IDF + Logistic Regression');
+    } finally {
+      if (origMlUrl) process.env.ML_SERVICE_URL = origMlUrl;
+      else delete process.env.ML_SERVICE_URL;
+    }
+  });
+
+  await t.test('9. Production request path and response schema validation', async () => {
+    const rawSample = 'Dear user, your account is suspended. Click here immediately to verify your password.';
+    const result = await queryMLPrediction(rawSample);
+
+    assert.equal(result.status, 'SUCCESS');
+    assert.equal(result.prediction, 'phishing');
+    assert.ok(typeof result.phishing_probability === 'number');
+    assert.ok(result.phishing_probability > 0.8);
+    assert.ok(typeof result.legitimate_probability === 'number');
+    assert.equal(result.model, 'TF-IDF + Logistic Regression');
+    assert.ok(Array.isArray(result.top_features));
+    assert.ok(result.top_features.length > 0);
+    assert.ok(result.top_features.some(f => f.term === 'click' || f.term === 'account'));
+
+    // Check evaluateAIThreat mapping
+    const evaluation = await evaluateAIThreat({
+      subject: 'Account Suspension',
+      body: rawSample,
+      sender: 'admin@alert-security.com'
+    });
+
+    assert.equal(evaluation.isMlAvailable, true);
+    assert.equal(evaluation.prediction, 'PHISHING');
+    assert.ok(evaluation.phishingProbability > 80);
+    assert.equal(evaluation.status, 'HIGH RISK');
+    assert.ok(evaluation.topFeatures.length > 0);
   });
 
 });

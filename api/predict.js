@@ -8,6 +8,8 @@
 
 import { setCorsHeaders, parseJsonBody, sendResponse } from './_utils.js';
 
+export const DEFAULT_PROD_ML_SERVICE_URL = 'https://phishguard-ai-ygzu.onrender.com';
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
@@ -16,7 +18,9 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    const mlUrl = process.env.ML_SERVICE_URL || '';
+    const rawEnv = process.env.ML_SERVICE_URL;
+    const isExplicitlyDisabled = rawEnv === 'disabled' || rawEnv === 'none';
+    const mlUrl = isExplicitlyDisabled ? '' : (rawEnv || DEFAULT_PROD_ML_SERVICE_URL);
     return sendResponse(res, 200, {
       status: 'online',
       service: 'MAVERICK ML Inference Proxy',
@@ -44,7 +48,11 @@ export default async function handler(req, res) {
       });
     }
 
-    const mlServiceUrl = (process.env.ML_SERVICE_URL || '').trim().replace(/\/+$/, '');
+    const rawEnvUrl = process.env.ML_SERVICE_URL;
+    const isExplicitlyDisabled = rawEnvUrl === 'disabled' || rawEnvUrl === 'none';
+    const mlServiceUrl = isExplicitlyDisabled 
+      ? '' 
+      : (rawEnvUrl || DEFAULT_PROD_ML_SERVICE_URL).trim().replace(/\/+$/, '');
 
     if (!mlServiceUrl) {
       return sendResponse(res, 503, {
@@ -60,7 +68,7 @@ export default async function handler(req, res) {
     const targetUrl = mlServiceUrl.endsWith('/predict') ? mlServiceUrl : `${mlServiceUrl}/predict`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
       const mlRes = await fetch(targetUrl, {
@@ -94,7 +102,7 @@ export default async function handler(req, res) {
         model: 'TF-IDF + Logistic Regression',
         status: 'UNAVAILABLE',
         error: isTimeout
-          ? 'ML inference service timed out (>8000ms)'
+          ? 'ML inference service timed out (>10000ms)'
           : 'Unable to reach ML inference service at configured ML_SERVICE_URL'
       });
     }
