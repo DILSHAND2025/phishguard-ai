@@ -105,12 +105,21 @@ export async function queryMLPrediction(text) {
   }
 
   const baseUrl = getApiBaseUrl();
+  const customMlUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ML_SERVICE_URL) ||
+                      (typeof process !== 'undefined' && process.env?.VITE_ML_SERVICE_URL) || '';
+
+  const isLocalhost = (typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) ||
+    (typeof window === 'undefined');
+
   const endpoints = [
-    baseUrl ? `${baseUrl}/predict` : '',
+    customMlUrl ? `${customMlUrl.replace(/\/+$/, '')}/predict` : '',
     baseUrl ? `${baseUrl}/api/ml/predict` : '',
-    'http://127.0.0.1:8000/predict',
+    baseUrl ? `${baseUrl}/api/predict` : '',
+    baseUrl ? `${baseUrl}/predict` : '',
     '/api/ml/predict',
-    '/predict'
+    '/api/predict',
+    isLocalhost ? 'http://127.0.0.1:8000/predict' : ''
   ].filter(Boolean);
 
   for (const endpoint of endpoints) {

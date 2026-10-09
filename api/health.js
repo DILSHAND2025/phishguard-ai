@@ -25,7 +25,8 @@ export default async function handler(req, res) {
       environment: 'SIH-2026',
       gatewayType: 'Serverless Function',
       databaseConfigured: Boolean(process.env.DATABASE_URL),
-      databaseConnected: dbActive
+      databaseConnected: dbActive,
+      mlConfigured: Boolean(process.env.ML_SERVICE_URL)
     });
   } catch (err) {
     return sendResponse(res, 500, {

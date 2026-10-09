@@ -203,4 +203,59 @@ Visit http://secure-internal-update.online/auth-portal/wire-release now.`;
     assert.ok(networkFactor.points > 0, 'Geo/Network infrastructure layer contributed points');
   });
 
+  await t.test('8. Vercel serverless ML predict handler (api/predict.js) verification', async () => {
+    const { default: predictHandler } = await import('../api/predict.js');
+
+    function createMockRes() {
+      const headers = {};
+      let statusCode = 200;
+      let bodyData = null;
+      return {
+        statusCode,
+        setHeader(k, v) { headers[k.toLowerCase()] = v; },
+        getHeader(k) { return headers[k.toLowerCase()]; },
+        status(code) { statusCode = code; this.statusCode = code; return this; },
+        json(data) { bodyData = data; return this; },
+        end(data) { if (data) bodyData = data; return this; },
+        writeHead(code, h = {}) {
+          statusCode = code;
+          this.statusCode = code;
+          for (const [k, v] of Object.entries(h)) headers[k.toLowerCase()] = v;
+          return this;
+        },
+        _getData: () => bodyData,
+        _getStatus: () => statusCode,
+        _getHeader: (k) => headers[k.toLowerCase()]
+      };
+    }
+
+    // 1. OPTIONS CORS
+    const optRes = createMockRes();
+    await predictHandler({ method: 'OPTIONS' }, optRes);
+    assert.equal(optRes._getStatus(), 204);
+
+    // 2. GET Health
+    const getRes = createMockRes();
+    await predictHandler({ method: 'GET' }, getRes);
+    assert.equal(getRes._getStatus(), 200);
+    assert.equal(getRes._getData().status, 'online');
+
+    // 3. POST empty text -> 400
+    const emptyPostRes = createMockRes();
+    await predictHandler({ method: 'POST', body: { text: '' } }, emptyPostRes);
+    assert.equal(emptyPostRes._getStatus(), 400);
+
+    // 4. POST without ML_SERVICE_URL -> 503 UNAVAILABLE
+    const origMlUrl = process.env.ML_SERVICE_URL;
+    delete process.env.ML_SERVICE_URL;
+    try {
+      const noServiceRes = createMockRes();
+      await predictHandler({ method: 'POST', body: { text: 'Test text' } }, noServiceRes);
+      assert.equal(noServiceRes._getStatus(), 503);
+      assert.equal(noServiceRes._getData().prediction, 'UNAVAILABLE');
+    } finally {
+      if (origMlUrl) process.env.ML_SERVICE_URL = origMlUrl;
+    }
+  });
+
 });

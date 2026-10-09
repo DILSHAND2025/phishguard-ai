@@ -47,6 +47,7 @@ const VT_API_KEY = process.env.VIRUSTOTAL_API_KEY || '';
 const ABUSE_API_KEY = process.env.ABUSEIPDB_API_KEY || '';
 const PYTHON_CMD = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
+const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000').trim().replace(/\/+$/, '');
 
 const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -122,6 +123,7 @@ const server = http.createServer(async (req, res) => {
       environment: 'SIH-2026',
       databaseConfigured: Boolean(process.env.DATABASE_URL),
       databaseConnected: dbActive,
+      mlConfigured: Boolean(process.env.ML_SERVICE_URL || true),
       vtKeyConfigured: Boolean(VT_API_KEY),
       abuseKeyConfigured: Boolean(ABUSE_API_KEY),
       cachedEntries: CACHE.size,
@@ -196,11 +198,12 @@ const server = http.createServer(async (req, res) => {
         const parsed = JSON.parse(body || '{}');
         const text = parsed.text || '';
 
-        // 1. Try FastAPI ML Microservice on port 8000
+        // 1. Try FastAPI ML Microservice (local or remote via ML_SERVICE_URL)
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 2500);
-          const mlRes = await fetch('http://127.0.0.1:8000/predict', {
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const targetUrl = ML_SERVICE_URL.endsWith('/predict') ? ML_SERVICE_URL : `${ML_SERVICE_URL}/predict`;
+          const mlRes = await fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
