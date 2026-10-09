@@ -39,14 +39,17 @@ const BASE_PREFIX = RAW_BASE.replace(/\/$/, ''); // '' for root domain (Vercel),
 // Canonical mapping of views to relative sub-paths
 const VIEW_TO_REL_PATH = {
   'dashboard': '/dashboard',
-  'email-analysis': '/email-analysis',
-  'security-analyzer': '/analyzer',
-  'analysis-results': '/analyzer',
+  'email-analysis': '/analyzer',
+  'analyzer': '/analyzer',
+  'security-analyzer': '/security-analyzer',
+  'analysis-results': '/security-analyzer',
   'ioc-intel': '/ioc-intel',
   'threat-graph': '/threat-graph',
   'geo-asn': '/geo-asn',
   'investigation-case': '/cases',
+  'cases': '/cases',
   'forensic-report': '/reports',
+  'reports': '/reports',
   'settings': '/settings'
 };
 
@@ -54,8 +57,8 @@ const REL_PATH_TO_VIEW = {
   '': 'dashboard',
   '/': 'dashboard',
   '/dashboard': 'dashboard',
+  '/analyzer': 'email-analysis',
   '/email-analysis': 'email-analysis',
-  '/analyzer': 'security-analyzer',
   '/security-analyzer': 'security-analyzer',
   '/analysis-results': 'security-analyzer',
   '/ioc-intel': 'ioc-intel',
@@ -101,11 +104,8 @@ function getInitialView(user) {
   const rootClean = root.replace(/\/$/, '') || '/';
 
   if (!user) {
-    // Unauthenticated: redirect to root if user tries to access internal routes directly
-    if (currentClean !== rootClean) {
-      window.history.replaceState(null, '', root);
-    }
-    return 'dashboard';
+    // Preserve target intended view for after login without wiping path
+    return targetView || 'email-analysis';
   }
 
   // Authenticated: if user is at root, redirect to dashboard URL
@@ -157,19 +157,30 @@ function App() {
     const activeUser = getCurrentUser();
     if (!activeUser) {
       setCurrentUser(null);
-      window.history.replaceState(null, '', getRootUrl());
       return;
     }
 
-    setCurrentView(viewId);
-    window.history.pushState(null, '', getUrlForView(viewId));
+    const canonicalView = 
+      viewId === 'analyzer' ? 'email-analysis' :
+      viewId === 'cases' ? 'investigation-case' :
+      viewId === 'reports' ? 'forensic-report' :
+      viewId;
+
+    setCurrentView(canonicalView);
+    window.history.pushState(null, '', getUrlForView(canonicalView));
   }, []);
 
   // Authentication callback: called on successful Google OAuth
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    setCurrentView('dashboard');
-    window.history.pushState(null, '', getUrlForView('dashboard'));
+    const target = currentView || getViewFromCurrentLocation() || 'dashboard';
+    const canonicalTarget = 
+      target === 'analyzer' ? 'email-analysis' :
+      target === 'cases' ? 'investigation-case' :
+      target === 'reports' ? 'forensic-report' :
+      target;
+    setCurrentView(canonicalTarget);
+    window.history.replaceState(null, '', getUrlForView(canonicalTarget));
   };
 
   // Sign out callback: clears session and returns to login screen
@@ -268,11 +279,16 @@ function App() {
       const rawSnippetText = parsedEmail.rawSnippet || (typeof emailInput === 'string' ? emailInput : '');
       if (rawSnippetText) {
         const apiBase = getApiBaseUrl();
+        const isLocalHost = typeof window !== 'undefined' && 
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
         const authEndpoints = [
           apiBase ? `${apiBase}/api/email-authentication` : '',
           '/api/email-authentication',
-          'http://localhost:5000/api/email-authentication',
-          'http://127.0.0.1:5000/api/email-authentication'
+          ...(isLocalHost ? [
+            'http://localhost:5000/api/email-authentication',
+            'http://127.0.0.1:5000/api/email-authentication'
+          ] : [])
         ].filter(Boolean);
 
         for (const endpoint of authEndpoints) {
@@ -522,8 +538,9 @@ function App() {
     }
   };
 
-  // ROUTE GUARD: If user is not authenticated, render Login Page as the FIRST screen
-  if (!currentUser) {
+  // ROUTE GUARD: SOC operations require authentication; Email Analyzer is accessible for direct submission
+  const isPublicEmailView = currentView === 'email-analysis' || currentView === 'analyzer';
+  if (!currentUser && !isPublicEmailView) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
@@ -539,6 +556,7 @@ function App() {
           />
         );
       case 'email-analysis':
+      case 'analyzer':
         return (
           <EmailAnalysisPage
             onViewChange={handleViewChange}
@@ -579,14 +597,16 @@ function App() {
           />
         );
       case 'investigation-case':
+      case 'cases':
         return (
           <InvestigationCasePage
             onViewChange={handleViewChange}
+            onOpenCase={handleOpenCase}
             selectedCase={selectedCase}
-            currentAnalysis={currentAnalysis}
           />
         );
       case 'forensic-report':
+      case 'reports':
         return (
           <ForensicReportPage
             onViewChange={handleViewChange}
@@ -613,7 +633,7 @@ function App() {
     }
   };
 
-  const isUserEmailView = currentView === 'email-analysis';
+  const isUserEmailView = currentView === 'email-analysis' || currentView === 'analyzer';
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-900">

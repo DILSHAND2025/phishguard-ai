@@ -50,11 +50,16 @@ export class BackendGeoProvider extends BaseGeoProvider {
   }
 
   async lookup(ip) {
+    const isLocalHost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
     const endpoints = [
       this.baseUrl ? `${this.baseUrl}/api/geoip?ip=${encodeURIComponent(ip)}` : '',
       `/api/geoip?ip=${encodeURIComponent(ip)}`,
-      `http://localhost:5000/api/geoip?ip=${encodeURIComponent(ip)}`,
-      `http://127.0.0.1:5000/api/geoip?ip=${encodeURIComponent(ip)}`
+      ...(isLocalHost ? [
+        `http://localhost:5000/api/geoip?ip=${encodeURIComponent(ip)}`,
+        `http://127.0.0.1:5000/api/geoip?ip=${encodeURIComponent(ip)}`
+      ] : [])
     ].filter(Boolean);
 
     for (const endpoint of endpoints) {

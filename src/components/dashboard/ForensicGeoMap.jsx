@@ -51,7 +51,8 @@ export const ForensicGeoMap = ({
   geoRecords = [], 
   title = "Network Intelligence",
   subtitle = "Geospatial routing and autonomous system infrastructure mapping",
-  className = ""
+  className = "",
+  onSelectIP
 }) => {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -83,15 +84,16 @@ export const ForensicGeoMap = ({
       .catch(err => console.error("Failed to fetch client geo:", err));
   }, []);
 
-  const displayRecords = [...(Array.isArray(geoRecords) ? geoRecords : []).filter(r => !r.isDemo)];
-  if (clientGeo && !displayRecords.some(r => r.ip === clientGeo.ip)) {
-    displayRecords.push(clientGeo);
-  }
-
-  // Filter records that have valid numeric coordinates
-  const geolocatedPoints = displayRecords.filter(
-    r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude)
-  );
+  // Filter records that have valid numeric coordinates with stable memoization
+  const geolocatedPoints = React.useMemo(() => {
+    const displayRecords = (Array.isArray(geoRecords) ? geoRecords : []).filter(r => !r.isDemo);
+    if (clientGeo && !displayRecords.some(r => r.ip === clientGeo.ip)) {
+      displayRecords.push(clientGeo);
+    }
+    return displayRecords.filter(
+      r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude)
+    );
+  }, [geoRecords, clientGeo]);
 
   // Initialize and update Leaflet Map
   useEffect(() => {
@@ -99,108 +101,142 @@ export const ForensicGeoMap = ({
 
     // Create map instance if not already initialized
     if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [20, 0],
-        zoom: 2,
-        minZoom: 1,
-        maxZoom: 16,
-        attributionControl: true,
-        scrollWheelZoom: false
-      });
+      if (mapContainerRef.current._leaflet_id) {
+        delete mapContainerRef.current._leaflet_id;
+      }
+      try {
+        const map = L.map(mapContainerRef.current, {
+          center: [20, 0],
+          zoom: 2,
+          minZoom: 1,
+          maxZoom: 16,
+          attributionControl: true,
+          scrollWheelZoom: false
+        });
 
-      // Standard Free OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19
-      }).addTo(map);
+        // Standard Free OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19
+        }).addTo(map);
 
-      markersLayerRef.current = L.featureGroup().addTo(map);
-      mapInstanceRef.current = map;
+        markersLayerRef.current = L.featureGroup().addTo(map);
+        mapInstanceRef.current = map;
+      } catch (err) {
+        console.warn('[ForensicGeoMap] Leaflet map initialization safely caught:', err);
+      }
     }
 
     const map = mapInstanceRef.current;
     const markersLayer = markersLayerRef.current;
 
-    // Clear previous markers
-    markersLayer.clearLayers();
+    if (!map || !markersLayer) return;
 
-    // Add markers for all resolved points
-    if (geolocatedPoints.length > 0) {
-      const bounds = L.latLngBounds([]);
+    try {
+      // Clear previous markers
+      markersLayer.clearLayers();
 
-      geolocatedPoints.forEach(record => {
-        const latLng = [record.latitude, record.longitude];
-        bounds.extend(latLng);
+      // Add markers for all resolved points
+      if (geolocatedPoints.length > 0) {
+        const bounds = L.latLngBounds([]);
 
-        const icon = createSvgIcon(record.role, record.isDemo);
-        const marker = L.marker(latLng, { icon });
+        geolocatedPoints.forEach(record => {
+          if (!record || typeof record.latitude !== 'number' || typeof record.longitude !== 'number' || isNaN(record.latitude) || isNaN(record.longitude)) {
+            return;
+          }
+          const latLng = [record.latitude, record.longitude];
+          bounds.extend(latLng);
 
-        // Build structured popup - clean white card style
-        const popupContent = `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; min-width: 200px; padding: 4px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
-              <strong style="color: #0f172a; font-size: 12px; font-family: monospace;">${record.ip}</strong>
-              <span style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; font-weight: 700;">
-                ${record.role || 'PUBLIC IP'}
-              </span>
+          const icon = createSvgIcon(record.role, record.isDemo);
+          const marker = L.marker(latLng, { icon });
+
+          const safeLat = Number(record.latitude).toFixed(4);
+          const safeLng = Number(record.longitude).toFixed(4);
+
+          // Build structured popup - clean white card style
+          const popupContent = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; min-width: 200px; padding: 4px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                <strong style="color: #0f172a; font-size: 12px; font-family: monospace;">${record.ip || 'Unknown IP'}</strong>
+                <span style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; font-weight: 700;">
+                  ${record.role || 'PUBLIC IP'}
+                </span>
+              </div>
+              
+              <div style="margin-bottom: 3px;">
+                <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Location:</span>
+                <div style="color: #0f172a; font-weight: 600;">${record.city ? `${record.city}, ` : ''}${record.country || 'Unknown'} ${record.countryCode ? `(${record.countryCode})` : ''}</div>
+              </div>
+
+              <div style="margin-bottom: 3px;">
+                <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">ISP / ASN:</span>
+                <div style="color: #475569;">${record.asn || 'N/A'} • ${record.isp || record.asnOrg || 'Unknown'}</div>
+              </div>
+
+              <div style="margin-bottom: 4px;">
+                <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Coordinates:</span>
+                <div style="color: #64748b; font-size: 10px; font-family: monospace;">${safeLat}, ${safeLng}</div>
+              </div>
+
+              <div style="padding-top: 4px; border-top: 1px solid #e2e8f0; margin-top: 4px;">
+                <span style="font-size: 9px; font-weight: 600; color: ${record.isDemo ? '#d97706' : '#059669'};">
+                  ${record.dataSource || 'FORENSIC TELEMETRY'}
+                </span>
+              </div>
             </div>
-            
-            <div style="margin-bottom: 3px;">
-              <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Location:</span>
-              <div style="color: #0f172a; font-weight: 600;">${record.city ? `${record.city}, ` : ''}${record.country || 'Unknown'} ${record.countryCode ? `(${record.countryCode})` : ''}</div>
-            </div>
+          `;
 
-            <div style="margin-bottom: 3px;">
-              <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">ISP / ASN:</span>
-              <div style="color: #475569;">${record.asn || 'N/A'} • ${record.isp || record.asnOrg || 'Unknown'}</div>
-            </div>
+          marker.bindPopup(popupContent);
 
-            <div style="margin-bottom: 4px;">
-              <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Coordinates:</span>
-              <div style="color: #64748b; font-size: 10px; font-family: monospace;">${record.latitude.toFixed(4)}, ${record.longitude.toFixed(4)}</div>
-            </div>
+          marker.on('click', () => {
+            setSelectedIP(record.ip);
+            if (typeof onSelectIP === 'function') {
+              onSelectIP(record.ip);
+            }
+          });
 
-            <div style="padding-top: 4px; border-top: 1px solid #e2e8f0; margin-top: 4px;">
-              <span style="font-size: 9px; font-weight: 600; color: ${record.isDemo ? '#d97706' : '#059669'};">
-                ${record.dataSource || 'FORENSIC TELEMETRY'}
-              </span>
-            </div>
-          </div>
-        `;
-
-        marker.bindPopup(popupContent);
-
-        marker.on('click', () => {
-          setSelectedIP(record.ip);
+          markersLayer.addLayer(marker);
         });
 
-        markersLayer.addLayer(marker);
-      });
-
-      // Fit map viewport to include all markers
-      if (geolocatedPoints.length === 1) {
-        map.setView([geolocatedPoints[0].latitude, geolocatedPoints[0].longitude], 5);
+        // Fit map viewport to include all markers
+        if (geolocatedPoints.length === 1) {
+          map.setView([geolocatedPoints[0].latitude, geolocatedPoints[0].longitude], 5);
+        } else {
+          map.fitBounds(bounds, { padding: [30, 30], maxZoom: 8 });
+        }
       } else {
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 8 });
+        map.setView([20, 0], 2);
       }
-    } else {
-      map.setView([20, 0], 2);
+
+      // Leaflet container resize check
+      const timer = setTimeout(() => {
+        try {
+          map.invalidateSize();
+        } catch {
+          // ignore
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
+    } catch (err) {
+      console.warn('[ForensicGeoMap] Error updating Leaflet map layers:', err);
     }
-
-    // Leaflet container resize check
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [geolocatedPoints]);
+  }, [geolocatedPoints, onSelectIP]);
 
   // Clean up on component unmount
   useEffect(() => {
+    const container = mapContainerRef.current;
     return () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.remove();
+        } catch {
+          // ignore
+        }
         mapInstanceRef.current = null;
+      }
+      if (container && container._leaflet_id) {
+        delete container._leaflet_id;
       }
     };
   }, []);
@@ -208,6 +244,9 @@ export const ForensicGeoMap = ({
   // Handle clicking a row in the IP ledger table
   const handleFocusIP = (record) => {
     setSelectedIP(record.ip);
+    if (typeof onSelectIP === 'function') {
+      onSelectIP(record.ip);
+    }
     if (mapInstanceRef.current && typeof record.latitude === 'number' && typeof record.longitude === 'number') {
       mapInstanceRef.current.setView([record.latitude, record.longitude], 7, { animate: true });
       if (markersLayerRef.current) {

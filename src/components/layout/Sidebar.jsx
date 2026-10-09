@@ -26,7 +26,7 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       id: 'email-analysis', 
       label: 'Email Analyzer', 
       icon: Mail,
-      isActive: currentView === 'email-analysis'
+      isActive: currentView === 'email-analysis' || currentView === 'analyzer'
     },
     { 
       id: 'security-analyzer', 

@@ -35,6 +35,7 @@ export const SecurityAnalyzerPage = ({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingJson, setExportingJson] = useState(false);
   const [isRetryingSave, setIsRetryingSave] = useState(false);
+  const [selectedGeoIP, setSelectedGeoIP] = useState(null);
 
   // If no analysis is loaded yet, provide a clean empty state with action to start one
   if (!currentAnalysis || !currentAnalysis.email) {
@@ -176,10 +177,9 @@ export const SecurityAnalyzerPage = ({
   });
 
   // Active GeoIP record for details column
-  const activeGeoRecord = (Array.isArray(geoList) ? geoList : []).find(g => g.ip === selectedGeoIP) 
+  const activeGeoRecord = (selectedGeoIP && (Array.isArray(geoList) ? geoList : []).find(g => g.ip === selectedGeoIP)) 
     || geoInfo 
-    || geoList[0] 
-    || null;
+    || (Array.isArray(geoList) && geoList.length > 0 ? geoList[0] : null);
 
   return (
     <div className="space-y-6 pb-20 font-sans text-slate-900">
@@ -702,6 +702,7 @@ export const SecurityAnalyzerPage = ({
           geoRecords={geoList.length > 0 ? geoList : geoInfo ? [geoInfo] : []}
           title="Network Intelligence"
           subtitle="Geospatial routing and autonomous system infrastructure mapping"
+          onSelectIP={setSelectedGeoIP}
         />
       </div>
 

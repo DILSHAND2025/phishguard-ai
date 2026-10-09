@@ -35,7 +35,7 @@ export const Navbar = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const isUserEmailView = currentView === 'email-analysis';
+  const isUserEmailView = currentView === 'email-analysis' || currentView === 'analyzer';
 
   // Minimal Navbar for Normal User Email Analysis
   if (isUserEmailView) {
