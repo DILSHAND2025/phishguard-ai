@@ -123,7 +123,34 @@ function App() {
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
-  const [currentAnalysis, setCurrentAnalysis] = useState(null);
+  const [currentAnalysis, setCurrentAnalysis] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('maverick_active_analysis');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.email || parsed.fusion)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  // Sync active analysis to sessionStorage to withstand page refresh
+  useEffect(() => {
+    try {
+      if (currentAnalysis) {
+        sessionStorage.setItem('maverick_active_analysis', JSON.stringify(currentAnalysis));
+      } else {
+        sessionStorage.removeItem('maverick_active_analysis');
+      }
+    } catch (err) {
+      console.warn('Failed to cache currentAnalysis in sessionStorage:', err);
+    }
+  }, [currentAnalysis]);
+
   const [fusionWeights, setFusionWeights] = useState(() => {
     try {
       const saved = localStorage.getItem('maverick_weights');
@@ -185,8 +212,15 @@ function App() {
 
   // Sign out callback: clears session and returns to login screen
   const handleLogout = () => {
+    try {
+      sessionStorage.removeItem('maverick_active_analysis');
+    } catch {
+      // ignore
+    }
     logout();
     setCurrentUser(null);
+    setCurrentAnalysis(null);
+    setSelectedCase(null);
     setCurrentView('dashboard');
     window.history.replaceState(null, '', getRootUrl());
   };
@@ -573,6 +607,7 @@ function App() {
             onViewChange={handleViewChange}
             onRunAnalysis={runFullAnalysis}
             onRetrySave={handleRetrySaveCase}
+            onOpenScan={() => setIsScanModalOpen(true)}
           />
         );
       case 'ioc-intel':

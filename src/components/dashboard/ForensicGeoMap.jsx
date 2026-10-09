@@ -84,16 +84,21 @@ export const ForensicGeoMap = ({
       .catch(err => console.error("Failed to fetch client geo:", err));
   }, []);
 
+  // Prepare cleaned display records for ledger and map
+  const displayRecords = React.useMemo(() => {
+    const baseList = (Array.isArray(geoRecords) ? geoRecords : []).filter(r => r && !r.isDemo);
+    if (clientGeo && !baseList.some(r => r.ip === clientGeo.ip)) {
+      return [...baseList, clientGeo];
+    }
+    return baseList;
+  }, [geoRecords, clientGeo]);
+
   // Filter records that have valid numeric coordinates with stable memoization
   const geolocatedPoints = React.useMemo(() => {
-    const displayRecords = (Array.isArray(geoRecords) ? geoRecords : []).filter(r => !r.isDemo);
-    if (clientGeo && !displayRecords.some(r => r.ip === clientGeo.ip)) {
-      displayRecords.push(clientGeo);
-    }
     return displayRecords.filter(
       r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude)
     );
-  }, [geoRecords, clientGeo]);
+  }, [displayRecords]);
 
   // Initialize and update Leaflet Map
   useEffect(() => {
@@ -102,6 +107,14 @@ export const ForensicGeoMap = ({
     // Create map instance if not already initialized
     if (!mapInstanceRef.current) {
       if (mapContainerRef.current._leaflet_id) {
+        try {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+        } catch {
+          // ignore
+        }
         delete mapContainerRef.current._leaflet_id;
       }
       try {

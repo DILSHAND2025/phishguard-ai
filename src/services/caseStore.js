@@ -347,6 +347,8 @@ export function createCaseFromAnalysis(analysisResult) {
   // Return formatted case model immediately for in-memory view
   return {
     caseId,
+    sha256: analysisResult.email?.sha256 || null,
+    emailHash: analysisResult.email?.sha256 || null,
     title: `Forensic Investigation: ${analysisResult.email?.subject || 'Suspicious Email Ingestion'}`,
     priority: priority.toUpperCase(),
     threatScore,

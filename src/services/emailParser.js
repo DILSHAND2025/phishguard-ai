@@ -502,6 +502,9 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
     cleanBody = `Subject: ${subjectRaw}\nFrom: ${fromRaw}\n(Headers only payload ingested)`;
   }
 
+  // Compute true cryptographic SHA-256 hash of ingested raw payload
+  const emailSha256 = await computeSHA256(cleanInput);
+
   return {
     sender: fromRaw || 'Unknown Sender',
     fromParsed,
@@ -523,6 +526,7 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
     rawHeaders: headerText,
     body: cleanBody,
     rawSnippet: cleanInput.substring(0, 3500),
+    sha256: emailSha256,
     auth: {
       spf: { result: spfResult, details: spfDetails },
       dkim: { result: dkimResult, details: dkimDetails },

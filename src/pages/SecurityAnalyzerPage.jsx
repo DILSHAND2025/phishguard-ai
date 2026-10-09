@@ -25,7 +25,8 @@ export const SecurityAnalyzerPage = ({
   currentAnalysis, 
   onViewChange, 
   _onRunAnalysis,
-  onRetrySave
+  onRetrySave,
+  onOpenScan
 }) => {
   // State toggles
   const [showRawHeaders, setShowRawHeaders] = useState(false);
@@ -40,20 +41,41 @@ export const SecurityAnalyzerPage = ({
   // If no analysis is loaded yet, provide a clean empty state with action to start one
   if (!currentAnalysis || !currentAnalysis.email) {
     return (
-      <div className="rounded-xl bg-white border border-slate-200 p-12 text-center max-w-xl mx-auto my-12 space-y-4 shadow-xs font-sans">
-        <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
-          <ShieldAlert className="w-6 h-6" />
+      <div className="rounded-xl bg-white border border-slate-200 p-8 sm:p-12 text-center max-w-xl mx-auto my-12 space-y-5 shadow-xs font-sans">
+        <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-700">
+          <ShieldAlert className="w-7 h-7" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900">No Email Analysis Loaded</h2>
-        <p className="text-xs text-slate-500">
-          Submit an email in the Email Analyzer portal or choose an existing case from the Cases queue.
-        </p>
-        <button
-          onClick={() => onViewChange('email-analysis')}
-          className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
-        >
-          Go to Email Analyzer
-        </button>
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-bold text-slate-900">No Email Analysis Loaded</h2>
+          <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
+            No active forensic analysis was found for this session. Submit an email in the Email Analyzer portal, launch a quick threat scan, or inspect a stored case from the Cases queue.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={() => onViewChange('email-analysis')}
+            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+          >
+            Go to Email Analyzer
+          </button>
+          {onOpenScan && (
+            <button
+              type="button"
+              onClick={onOpenScan}
+              className="px-4 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+            >
+              Launch Threat Scan
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onViewChange('cases')}
+            className="px-4 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+          >
+            View Cases Queue
+          </button>
+        </div>
       </div>
     );
   }
@@ -70,16 +92,16 @@ export const SecurityAnalyzerPage = ({
   } = currentAnalysis;
 
   // 1. Header & Identifiers
-  const caseId = caseItem?.caseId || email?.scenarioName || 'MAV-2026-00000000';
-  const threatScore = fusion?.threatScore ?? 'Unavailable';
-  const riskLevel = (fusion?.riskLevel || 'LOW').toUpperCase();
-  const sha256Hash = caseItem?.sha256 || currentAnalysis?.report?.evidenceIntegrity?.contentHashSha256 || '8f4c102948a7b6c5d4e3f27d1a293b6e8f4c102948a7b6c5d4e3f27d1a293b6e';
-  const classification = currentAnalysis?.aiThreat?.classification || currentAnalysis?.classification || (threatScore >= 80 ? 'Credential Phishing' : threatScore >= 60 ? 'Suspicious Impersonation' : threatScore >= 30 ? 'Suspicious Anomaly' : 'Clean Communication');
+  const caseId = caseItem?.caseId || currentAnalysis?.caseId || email?.scenarioName || 'MAV-2026-00000000';
+  const threatScore = typeof fusion?.threatScore === 'number' ? fusion.threatScore : (typeof currentAnalysis?.threatScore === 'number' ? currentAnalysis.threatScore : 'Unavailable');
+  const riskLevel = (fusion?.riskLevel || currentAnalysis?.riskLevel || (typeof threatScore === 'number' && threatScore >= 80 ? 'CRITICAL' : typeof threatScore === 'number' && threatScore >= 60 ? 'HIGH' : typeof threatScore === 'number' && threatScore >= 30 ? 'MEDIUM' : 'LOW')).toUpperCase();
+  const sha256Hash = caseItem?.sha256 || email?.sha256 || currentAnalysis?.report?.evidenceIntegrity?.contentHashSha256 || null;
+  const classification = currentAnalysis?.aiThreat?.classification || currentAnalysis?.classification || (typeof threatScore === 'number' && threatScore >= 80 ? 'Credential Phishing' : typeof threatScore === 'number' && threatScore >= 60 ? 'Suspicious Impersonation' : typeof threatScore === 'number' && threatScore >= 30 ? 'Suspicious Anomaly' : 'Clean Communication');
 
   // 2. Threat Summary Metric Values
-  const isMlAvailable = aiThreat && aiThreat.isMlAvailable;
+  const isMlAvailable = Boolean(aiThreat && aiThreat.isMlAvailable);
   const mlDetectionValue = isMlAvailable && typeof aiThreat.phishingProbability === 'number'
-    ? `${aiThreat.phishingProbability}%`
+    ? `${Math.round(aiThreat.phishingProbability)}%`
     : 'Unavailable';
 
   const iocCount = Array.isArray(iocs) ? iocs.length : 0;
@@ -877,17 +899,19 @@ export const SecurityAnalyzerPage = ({
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
             <span className="text-[10px] uppercase font-semibold text-slate-500 block">SHA-256 Integrity Hash</span>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-slate-800 truncate text-[11px]" title={sha256Hash}>
-                {sha256Hash ? `${sha256Hash.slice(0, 16)}...` : 'N/A'}
+              <span className="font-mono text-slate-800 truncate text-[11px]" title={sha256Hash || 'Unavailable'}>
+                {sha256Hash ? `${sha256Hash.slice(0, 16)}...` : 'Unavailable'}
               </span>
-              <button
-                type="button"
-                onClick={handleCopyHash}
-                className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"
-                title="Copy full SHA-256"
-              >
-                {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
+              {sha256Hash && (
+                <button
+                  type="button"
+                  onClick={handleCopyHash}
+                  className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"
+                  title="Copy full SHA-256"
+                >
+                  {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
           </div>
         </div>
