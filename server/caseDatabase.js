@@ -27,18 +27,45 @@ export class DatabaseUnavailableError extends Error {
 }
 
 /**
+ * Sanitizes raw database error messages to prevent credential/URL leakage.
+ */
+export function sanitizeDbError(err) {
+  if (!err) return 'Database is unavailable';
+  const msg = typeof err === 'string' ? err : err.message || '';
+  const sanitized = msg.replace(/postgresql:\/\/[^@\s]+@[^\s/]+/gi, 'postgresql://[REDACTED]@[REDACTED]');
+  if (/can't reach database server|connection refused|connect econnrefused|timeout|etimedout/i.test(sanitized)) {
+    return 'Database host unreachable or connection timed out. Verify PostgreSQL host and network configuration.';
+  }
+  if (/password authentication failed|authentication failed/i.test(sanitized)) {
+    return 'Database authentication failed. Please verify credentials in DATABASE_URL.';
+  }
+  if (/database ".*" does not exist/i.test(sanitized)) {
+    return 'Target PostgreSQL database does not exist.';
+  }
+  if (/relation ".*" does not exist|table.*does not exist/i.test(sanitized)) {
+    return 'Database schema missing. Execute "npx prisma migrate deploy" to apply migrations.';
+  }
+  if (/DATABASE_URL.*not configured|unconfigured/i.test(sanitized)) {
+    return 'DATABASE_URL environment variable is not configured.';
+  }
+  return sanitized.slice(0, 150);
+}
+
+/**
  * Initializes and retrieves the Prisma Client singleton
  */
 export function getPrismaClient() {
+  if (globalThis.__maverickPrisma) return globalThis.__maverickPrisma;
   if (prismaInstance) return prismaInstance;
   const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl || !dbUrl.trim() || dbUrl.includes('placeholder')) {
+  if (!dbUrl || !dbUrl.trim() || dbUrl.includes('placeholder') || dbUrl.includes('user:password@localhost')) {
     return null;
   }
   try {
     prismaInstance = new PrismaClient({
       log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
     });
+    globalThis.__maverickPrisma = prismaInstance;
     return prismaInstance;
   } catch (err) {
     console.warn('[MAVERICK DB] Failed to instantiate PrismaClient:', err.message);
@@ -69,7 +96,13 @@ export async function isDatabaseAvailable() {
   const prisma = getPrismaClient();
   if (!prisma) return false;
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Database ping timeout')), 3000)
+    );
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      timeoutPromise
+    ]);
     return true;
   } catch {
     return false;
@@ -196,23 +229,66 @@ export async function saveCase(payload) {
     return { case: newRecord, caseId: newRecord.caseId, isDuplicate: false };
   }
 
-  // --- 2. Live PostgreSQL via Prisma Branch ---
+  // --- 2. Live PostgreSQL via Prisma Transaction Branch ---
   const prisma = getPrismaClient();
   if (!prisma) {
-    throw new DatabaseUnavailableError();
+    throw new DatabaseUnavailableError('Database is unavailable or DATABASE_URL is not configured.');
   }
 
   try {
-    // Duplicate check using emailHash
-    const existingCase = await prisma.emailCase.findFirst({
-      where: { emailHash }
-    });
+    return await prisma.$transaction(async (tx) => {
+      // Duplicate check using emailHash
+      const existingCase = await tx.emailCase.findFirst({
+        where: { emailHash }
+      });
 
-    if (existingCase) {
-      // Reopen / update existing case
-      const updatedCase = await prisma.emailCase.update({
-        where: { id: existingCase.id },
+      if (existingCase) {
+        // Reopen / update existing case
+        const updatedCase = await tx.emailCase.update({
+          where: { id: existingCase.id },
+          data: {
+            analyzedAt: new Date(),
+            threatScore,
+            priority,
+            classification,
+            confidence,
+            phishingProbability: phishingProb,
+            legitimateProbability: legitimateProb,
+            riskSummary,
+            status: 'active', // Reopen if archived
+            evidenceFusion: fusion,
+            iocs,
+            authenticationResults: emailAuth,
+            attachmentFindings: attachments,
+            geoIntelligence: { geoInfo, geoList },
+            recommendations,
+            timeline,
+            forensicMetadata: { campaign }
+          }
+        });
+        return { case: updatedCase, caseId: updatedCase.caseId, isDuplicate: true };
+      }
+
+      // Generate unique Case ID (preserve provided caseId if valid MAV format)
+      let caseId = payload.caseId && /^MAV-2026-[A-F0-9]{8}$/i.test(payload.caseId)
+        ? payload.caseId
+        : generateCaseId(sender);
+
+      // Ensure uniqueness
+      let collisionCheck = await tx.emailCase.findUnique({ where: { caseId } });
+      while (collisionCheck) {
+        caseId = generateCaseId();
+        collisionCheck = await tx.emailCase.findUnique({ where: { caseId } });
+      }
+
+      const createdCase = await tx.emailCase.create({
         data: {
+          id: crypto.randomUUID(),
+          caseId,
+          subject,
+          sender,
+          recipient,
+          receivedAt: email.date ? new Date(email.date) : new Date(),
           analyzedAt: new Date(),
           threatScore,
           priority,
@@ -221,67 +297,27 @@ export async function saveCase(payload) {
           phishingProbability: phishingProb,
           legitimateProbability: legitimateProb,
           riskSummary,
-          status: 'active', // Reopen if archived
-          evidenceFusion: fusion,
+          originalFilename: originalFilename || email.filename || null,
+          emailHash,
+          status: 'active',
+          headers: email.headers || null,
           iocs,
+          geoIntelligence: { geoInfo, geoList },
           authenticationResults: emailAuth,
           attachmentFindings: attachments,
-          geoIntelligence: { geoInfo, geoList },
+          evidenceFusion: fusion,
           recommendations,
           timeline,
           forensicMetadata: { campaign }
         }
       });
-      return { case: updatedCase, caseId: updatedCase.caseId, isDuplicate: true };
-    }
 
-    // Generate unique Case ID
-    let caseId = payload.caseId && /^MAV-2026-[A-F0-9]{8}$/i.test(payload.caseId)
-      ? payload.caseId
-      : generateCaseId(sender);
-
-    // Ensure uniqueness
-    let collisionCheck = await prisma.emailCase.findUnique({ where: { caseId } });
-    while (collisionCheck) {
-      caseId = generateCaseId();
-      collisionCheck = await prisma.emailCase.findUnique({ where: { caseId } });
-    }
-
-    const createdCase = await prisma.emailCase.create({
-      data: {
-        id: crypto.randomUUID(),
-        caseId,
-        subject,
-        sender,
-        recipient,
-        receivedAt: email.date ? new Date(email.date) : new Date(),
-        analyzedAt: new Date(),
-        threatScore,
-        priority,
-        classification,
-        confidence,
-        phishingProbability: phishingProb,
-        legitimateProbability: legitimateProb,
-        riskSummary,
-        originalFilename: originalFilename || email.filename || null,
-        emailHash,
-        status: 'active',
-        headers: email.headers || null,
-        iocs,
-        geoIntelligence: { geoInfo, geoList },
-        authenticationResults: emailAuth,
-        attachmentFindings: attachments,
-        evidenceFusion: fusion,
-        recommendations,
-        timeline,
-        forensicMetadata: { campaign }
-      }
+      return { case: createdCase, caseId: createdCase.caseId, isDuplicate: false };
     });
-
-    return { case: createdCase, caseId: createdCase.caseId, isDuplicate: false };
   } catch (err) {
-    console.error('[MAVERICK DB] Failed to save case in database:', err.message);
-    throw new DatabaseUnavailableError(`Database save failed: ${err.message}`);
+    const safeError = sanitizeDbError(err);
+    console.error('[MAVERICK DB] Failed to save case in database:', safeError);
+    throw new DatabaseUnavailableError(`Database save failed: ${safeError}`);
   }
 }
 

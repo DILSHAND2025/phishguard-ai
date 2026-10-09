@@ -711,4 +711,121 @@ test('MAVERICK Persistent Email Case Database & Priority Queue Suite', async (t)
     }
   });
 
+  // =========================================================================
+  // 24. RETRY SAVING CASE: CASE ID & SHA-256 DEDUPLICATION PRESERVATION
+  // =========================================================================
+  await t.test('24. Retry Saving Case: preserves exact case ID and SHA-256 deduplication behavior', async () => {
+    const fixedCaseId = 'MAV-2026-A1B2C3D4';
+    const rawSnippet = 'From: ceo@phish.net\nTo: finance@corp.in\nSubject: Invoice #99812';
+    const emailHash = computeEmailHash(rawSnippet);
+
+    // Initial save with explicit caseId
+    const firstSave = await saveCase({
+      caseId: fixedCaseId,
+      emailHash,
+      email: {
+        subject: 'Invoice #99812',
+        sender: 'ceo@phish.net',
+        recipient: 'finance@corp.in',
+        rawSnippet
+      },
+      fusion: { threatScore: 92, riskLevel: 'CRITICAL' }
+    });
+
+    assert.equal(firstSave.isDuplicate, false);
+    assert.equal(firstSave.caseId, fixedCaseId, 'Case ID must be preserved from client');
+    assert.equal(firstSave.case.emailHash, emailHash);
+
+    // Resend / Retry save with same caseId and emailHash
+    const retrySave = await saveCase({
+      caseId: fixedCaseId,
+      emailHash,
+      email: {
+        subject: 'Invoice #99812',
+        sender: 'ceo@phish.net',
+        recipient: 'finance@corp.in',
+        rawSnippet
+      },
+      fusion: { threatScore: 95, riskLevel: 'CRITICAL' }
+    });
+
+    assert.equal(retrySave.isDuplicate, true, 'Retry with same emailHash must be identified as duplicate');
+    assert.equal(retrySave.caseId, fixedCaseId, 'Case ID must NOT change on retry save');
+    assert.equal(retrySave.case.threatScore, 95, 'Case must be updated with latest intelligence');
+  });
+
+  // =========================================================================
+  // 25. PERSISTENCE VERIFICATION: CASE SAVES, PERSISTS, & SORTS DESC BY THREAT SCORE
+  // =========================================================================
+  await t.test('25. Persistence verification: saves case, persists across refresh, and orders by threatScore DESC', async () => {
+    const testServer = http.createServer(server.listeners('request')[0]);
+    await new Promise(resolve => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      // Clear test store
+      setTestStore([]);
+
+      // 1. Save 3 cases with varying threat scores
+      const casesToSave = [
+        {
+          caseId: 'MAV-2026-48000001',
+          email: { subject: 'Suspicious Storage Notification', sender: 'cloud@storage-notice.biz' },
+          fusion: { threatScore: 48, riskLevel: 'MEDIUM', verifiedReasons: ['Unusual link structure'] },
+          rawContent: 'storage-warning-1'
+        },
+        {
+          caseId: 'MAV-2026-96000001',
+          email: { subject: 'Urgent: Wire Transfer Authorized', sender: 'cfo@vip-executive.net' },
+          fusion: { threatScore: 96, riskLevel: 'CRITICAL', verifiedReasons: ['Executive spoofing', 'Zero-day attachment'] },
+          rawContent: 'wire-transfer-critical-1'
+        },
+        {
+          caseId: 'MAV-2026-12000001',
+          email: { subject: 'Weekly Team Standup Notes', sender: 'team@internal.org' },
+          fusion: { threatScore: 12, riskLevel: 'LOW', verifiedReasons: ['Clean authentication'] },
+          rawContent: 'standup-notes-clean-1'
+        }
+      ];
+
+      for (const item of casesToSave) {
+        const postRes = await fetch(`${baseUrl}/api/cases`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+        assert.equal(postRes.status, 201, `Case ${item.caseId} must be successfully created`);
+        const body = await postRes.json();
+        assert.equal(body.success, true);
+        assert.equal(body.caseId, item.caseId);
+      }
+
+      // 2. Fetch /api/cases - MUST be sorted by threatScore DESC
+      const getRes = await fetch(`${baseUrl}/api/cases`);
+      assert.equal(getRes.status, 200);
+      const fetchedCases = await getRes.json();
+      assert.equal(fetchedCases.length, 3);
+      assert.equal(fetchedCases[0].caseId, 'MAV-2026-96000001', 'First case must be Critical (threatScore 96)');
+      assert.equal(fetchedCases[0].threatScore, 96);
+      assert.equal(fetchedCases[1].caseId, 'MAV-2026-48000001', 'Second case must be Medium (threatScore 48)');
+      assert.equal(fetchedCases[1].threatScore, 48);
+      assert.equal(fetchedCases[2].caseId, 'MAV-2026-12000001', 'Third case must be Low (threatScore 12)');
+      assert.equal(fetchedCases[2].threatScore, 12);
+
+      // 3. Simulate application refresh by fetching single case by Case ID
+      const singleRes = await fetch(`${baseUrl}/api/cases/MAV-2026-96000001`);
+      assert.equal(singleRes.status, 200);
+      const singleCase = await singleRes.json();
+      assert.equal(singleCase.caseId, 'MAV-2026-96000001');
+      assert.equal(singleCase.threatScore, 96);
+      assert.equal(singleCase.priority, 'Critical');
+      assert.equal(singleCase.status, 'active');
+      assert.ok(singleCase.evidenceFusion);
+    } finally {
+      await new Promise(resolve => testServer.close(resolve));
+    }
+  });
+
 });
+

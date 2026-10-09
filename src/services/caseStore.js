@@ -179,6 +179,8 @@ export async function persistCaseInvestigation(analysisResult) {
   const endpoint = `${baseUrl}/api/cases`;
 
   const payload = {
+    caseId: analysisResult.caseId || analysisResult.caseItem?.caseId || null,
+    emailHash: analysisResult.emailHash || analysisResult.caseItem?.sha256 || null,
     email: analysisResult.email || {},
     fusion: analysisResult.fusion || {},
     aiThreat: analysisResult.aiThreat || null,
@@ -188,8 +190,8 @@ export async function persistCaseInvestigation(analysisResult) {
     emailAuth: analysisResult.emailAuth || null,
     attachments: analysisResult.email?.attachments || [],
     campaign: analysisResult.campaign || null,
-    timeline: analysisResult.report?.timeline || [],
-    recommendations: analysisResult.report?.recommendations || [],
+    timeline: analysisResult.report?.timeline || analysisResult.timeline || [],
+    recommendations: analysisResult.report?.recommendations || analysisResult.recommendations || [],
     originalFilename: analysisResult.email?.filename || analysisResult.filename || null,
     rawContent: analysisResult.email?.rawSnippet || ''
   };
@@ -201,11 +203,16 @@ export async function persistCaseInvestigation(analysisResult) {
       body: JSON.stringify(payload)
     });
 
+    const contentType = res.headers.get('content-type') || '';
+
     if (res.status === 503) {
+      const errBody = contentType.includes('application/json')
+        ? await res.json().catch(() => ({}))
+        : {};
       return {
         success: false,
         isDbUnavailable: true,
-        error: 'Analysis completed, but the case could not be saved. Database is unavailable. Please retry saving the case.'
+        error: errBody.error || 'Analysis completed, but the case could not be saved. Database is unavailable. Please retry saving the case.'
       };
     }
 
@@ -217,7 +224,6 @@ export async function persistCaseInvestigation(analysisResult) {
       };
     }
 
-    const contentType = res.headers.get('content-type') || '';
     if (!res.ok) {
       const errBody = contentType.includes('application/json')
         ? await res.json().catch(() => ({}))

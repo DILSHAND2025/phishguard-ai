@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
         return sendResponse(res, 503, {
           success: false,
-          error: 'Database is unavailable or DATABASE_URL is not configured.',
+          error: err.message || 'Database is unavailable or DATABASE_URL is not configured.',
           status: 'DB_UNAVAILABLE'
         });
       }
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
       if (err instanceof DatabaseUnavailableError || err.code === 'DB_UNAVAILABLE') {
         return sendResponse(res, 503, {
           success: false,
-          error: 'Analysis completed, but the case could not be saved. Database is unavailable.',
+          error: err.message || 'Analysis completed, but the case could not be saved. Database is unavailable.',
           status: 'DB_UNAVAILABLE'
         });
       }

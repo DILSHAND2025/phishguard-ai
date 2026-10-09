@@ -374,6 +374,8 @@ function App() {
       let dbSaveError = null;
       try {
         const saveRes = await persistCaseInvestigation({
+          caseId: caseItem.caseId,
+          emailHash: caseItem.sha256,
           email: parsedEmail,
           fusion,
           aiThreat,
@@ -382,7 +384,8 @@ function App() {
           geoList,
           emailAuth,
           campaign: primaryCampaign,
-          originalFilename: parsedEmail.filename
+          originalFilename: parsedEmail.filename,
+          rawContent: parsedEmail.rawSnippet || ''
         });
 
         if (saveRes.success) {
@@ -434,6 +437,8 @@ function App() {
     if (!currentAnalysis) return { success: false, error: 'No active analysis to save' };
     try {
       const saveRes = await persistCaseInvestigation({
+        caseId: currentAnalysis.caseId || currentAnalysis.caseItem?.caseId,
+        emailHash: currentAnalysis.caseItem?.sha256 || currentAnalysis.emailHash,
         email: currentAnalysis.email,
         fusion: currentAnalysis.fusion,
         aiThreat: currentAnalysis.aiThreat,
