@@ -52,23 +52,103 @@ export function sanitizeDbError(err) {
 }
 
 /**
+ * Normalizes PostgreSQL connection string for cloud providers (Neon SSL requirements)
+ */
+export function normalizeDatabaseUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  let normalized = url.trim();
+  if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"))) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+  // Neon PostgreSQL requires SSL mode (sslmode=require)
+  if ((normalized.includes('.neon.tech') || normalized.includes('neon.') || normalized.includes('aws.neon')) && !normalized.includes('sslmode=')) {
+    normalized += normalized.includes('?') ? '&sslmode=require' : '?sslmode=require';
+  }
+  return normalized;
+}
+
+/**
+ * Ensures email_cases table and indexes exist safely and idempotently
+ */
+let schemaEnsured = false;
+const DDL_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "email_cases" (
+    "id" TEXT NOT NULL,
+    "caseId" TEXT NOT NULL,
+    "subject" TEXT NOT NULL DEFAULT '(No Subject)',
+    "sender" TEXT NOT NULL DEFAULT 'unknown@sender.local',
+    "recipient" TEXT NOT NULL DEFAULT 'unknown@recipient.local',
+    "receivedAt" TIMESTAMP(3),
+    "analyzedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "threatScore" INTEGER NOT NULL DEFAULT 0,
+    "priority" TEXT NOT NULL DEFAULT 'Low',
+    "classification" TEXT NOT NULL DEFAULT 'Legitimate',
+    "confidence" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    "phishingProbability" DOUBLE PRECISION,
+    "legitimateProbability" DOUBLE PRECISION,
+    "riskSummary" TEXT,
+    "originalFilename" TEXT,
+    "emailHash" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "headers" JSONB,
+    "iocs" JSONB,
+    "geoIntelligence" JSONB,
+    "authenticationResults" JSONB,
+    "attachmentFindings" JSONB,
+    "evidenceFusion" JSONB,
+    "recommendations" JSONB,
+    "timeline" JSONB,
+    "forensicMetadata" JSONB,
+    CONSTRAINT "email_cases_pkey" PRIMARY KEY ("id")
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "email_cases_caseId_key" ON "email_cases"("caseId")`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_threatScore_idx" ON "email_cases"("threatScore" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_createdAt_idx" ON "email_cases"("createdAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_priority_idx" ON "email_cases"("priority")`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_classification_idx" ON "email_cases"("classification")`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_status_idx" ON "email_cases"("status")`,
+  `CREATE INDEX IF NOT EXISTS "email_cases_emailHash_idx" ON "email_cases"("emailHash")`
+];
+
+export async function ensureSchemaExists(prisma) {
+  if (schemaEnsured || !prisma) return;
+  try {
+    for (const stmt of DDL_STATEMENTS) {
+      await prisma.$executeRawUnsafe(stmt);
+    }
+    schemaEnsured = true;
+  } catch (err) {
+    // If DDL execution is restricted or table is already managed, log sanitized notice and proceed
+    console.warn('[MAVERICK DB] Schema check notice:', sanitizeDbError(err));
+  }
+}
+
+/**
  * Initializes and retrieves the Prisma Client singleton
  */
 export function getPrismaClient() {
-  if (globalThis.__maverickPrisma) return globalThis.__maverickPrisma;
-  if (prismaInstance) return prismaInstance;
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl || !dbUrl.trim() || dbUrl.includes('placeholder') || dbUrl.includes('user:password@localhost')) {
     return null;
   }
+  if (globalThis.__maverickPrisma) return globalThis.__maverickPrisma;
+  if (prismaInstance) return prismaInstance;
   try {
+    const normalizedDbUrl = normalizeDatabaseUrl(dbUrl);
     prismaInstance = new PrismaClient({
+      datasources: {
+        db: {
+          url: normalizedDbUrl
+        }
+      },
       log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
     });
     globalThis.__maverickPrisma = prismaInstance;
     return prismaInstance;
   } catch (err) {
-    console.warn('[MAVERICK DB] Failed to instantiate PrismaClient:', err.message);
+    console.warn('[MAVERICK DB] Failed to instantiate PrismaClient:', sanitizeDbError(err));
     return null;
   }
 }
@@ -86,6 +166,7 @@ export function getTestStore() {
 
 export function resetTestStore() {
   testStore = null;
+  schemaEnsured = false;
 }
 
 /**
@@ -97,7 +178,7 @@ export async function isDatabaseAvailable() {
   if (!prisma) return false;
   try {
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Database ping timeout')), 3000)
+      setTimeout(() => reject(new Error('Database ping timeout')), 7000)
     );
     await Promise.race([
       prisma.$queryRaw`SELECT 1`,
@@ -234,6 +315,8 @@ export async function saveCase(payload) {
   if (!prisma) {
     throw new DatabaseUnavailableError('Database is unavailable or DATABASE_URL is not configured.');
   }
+
+  await ensureSchemaExists(prisma);
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -390,6 +473,8 @@ export async function getCases({
     throw new DatabaseUnavailableError();
   }
 
+  await ensureSchemaExists(prisma);
+
   try {
     const where = {};
 
@@ -435,8 +520,9 @@ export async function getCases({
       totalPages: Math.ceil(total / limitNum) || 1
     };
   } catch (err) {
-    console.error('[MAVERICK DB] Failed to fetch cases:', err.message);
-    throw new DatabaseUnavailableError(`Database query failed: ${err.message}`);
+    const safeError = sanitizeDbError(err);
+    console.error('[MAVERICK DB] Failed to fetch cases:', safeError);
+    throw new DatabaseUnavailableError(`Database query failed: ${safeError}`);
   }
 }
 
@@ -457,13 +543,16 @@ export async function getCaseByCaseId(caseId) {
     throw new DatabaseUnavailableError();
   }
 
+  await ensureSchemaExists(prisma);
+
   try {
     return await prisma.emailCase.findUnique({
       where: { caseId: cleanId }
     });
   } catch (err) {
-    console.error(`[MAVERICK DB] Failed to fetch case ${cleanId}:`, err.message);
-    throw new DatabaseUnavailableError(`Database lookup failed: ${err.message}`);
+    const safeError = sanitizeDbError(err);
+    console.error(`[MAVERICK DB] Failed to fetch case ${cleanId}:`, safeError);
+    throw new DatabaseUnavailableError(`Database lookup failed: ${safeError}`);
   }
 }
 
@@ -490,14 +579,17 @@ export async function updateCaseStatus(caseId, status) {
     throw new DatabaseUnavailableError();
   }
 
+  await ensureSchemaExists(prisma);
+
   try {
     return await prisma.emailCase.update({
       where: { caseId: cleanId },
       data: { status }
     });
   } catch (err) {
-    console.error(`[MAVERICK DB] Failed to update case ${cleanId}:`, err.message);
-    throw new DatabaseUnavailableError(`Database update failed: ${err.message}`);
+    const safeError = sanitizeDbError(err);
+    console.error(`[MAVERICK DB] Failed to update case ${cleanId}:`, safeError);
+    throw new DatabaseUnavailableError(`Database update failed: ${safeError}`);
   }
 }
 
@@ -539,6 +631,8 @@ export async function getCaseStats() {
     throw new DatabaseUnavailableError();
   }
 
+  await ensureSchemaExists(prisma);
+
   try {
     const activeWhere = { status: { not: 'archived' } };
 
@@ -574,7 +668,8 @@ export async function getCaseStats() {
       topThreats: topCases
     };
   } catch (err) {
-    console.error('[MAVERICK DB] Failed to compile case statistics:', err.message);
-    throw new DatabaseUnavailableError(`Database stats failed: ${err.message}`);
+    const safeError = sanitizeDbError(err);
+    console.error('[MAVERICK DB] Failed to compile case statistics:', safeError);
+    throw new DatabaseUnavailableError(`Database stats failed: ${safeError}`);
   }
 }
