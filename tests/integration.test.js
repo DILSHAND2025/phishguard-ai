@@ -537,4 +537,36 @@ Multi-hop test payload.`;
     assert.notEqual(mutated.evidenceIntegrity.contentHashSha256, contentHash);
   });
 
+  await t.test('21. Regression: Security Analyzer resilience with null emailAuth, malformed attachments, and partial fusion factors', async () => {
+    // 1. Verify buildForensicReport and Evidence Fusion succeed without throwing when emailAuth has null spf/dkim/dmarc
+    const testAnalysisWithNullAuth = {
+      email: {
+        sender: 'spoofed@evil.com',
+        subject: 'Malicious Wire',
+        date: '2026-09-05',
+        attachments: [null, { filename: 'malware.exe' }, {}],
+        sha256: 123456789 // non-string hash regression test
+      },
+      emailAuth: {
+        spf: null,
+        dkim: null,
+        dmarc: null
+      },
+      geoList: [null, { ip: null }, { country: 'Germany' }],
+      fusion: {
+        threatScore: 85,
+        riskLevel: 'CRITICAL',
+        factors: [null, { id: 'test', category: 'Test Layer', points: 10, maxPoints: 10, evidence: 'Verified' }],
+        verifiedReasons: [{ reason: 'Suspicious IP' }, null, 'Verified anomaly']
+      }
+    };
+
+    const report = await buildForensicReport(testAnalysisWithNullAuth);
+    assert.ok(report, 'Report should generate successfully despite null subobjects');
+    assert.equal(report.threatAssessment.overallScore, 85);
+    assert.equal(report.threatAssessment.classification, 'CRITICAL');
+    assert.ok(report.evidenceIntegrity.contentHashSha256, 'Should generate a content hash');
+  });
+
 });
+

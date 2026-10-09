@@ -12,11 +12,12 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    if (import.meta.env.DEV) {
-      console.error('[MAVERICK ErrorBoundary] Uncaught runtime exception:', error, errorInfo);
-    } else {
-      // In production, log only high-level sanitized error type
-      console.error('[MAVERICK ErrorBoundary] Runtime issue caught:', error?.name || 'Error');
+    console.error('[MAVERICK ErrorBoundary] Uncaught runtime exception:', error, errorInfo);
+    if (error?.stack) {
+      console.error('[MAVERICK ErrorBoundary] Error Stack:\n', error.stack);
+    }
+    if (errorInfo?.componentStack) {
+      console.error('[MAVERICK ErrorBoundary] Component Stack:\n', errorInfo.componentStack);
     }
   }
 
@@ -33,8 +34,7 @@ export class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      const isDev = Boolean(import.meta.env.DEV);
-      const safeMessage = isDev && this.state.error?.message
+      const safeMessage = this.state.error?.message
         ? this.state.error.message
         : 'A temporary error occurred while rendering this view. You can retry loading or return to the main dashboard.';
 
@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component {
               </p>
             </div>
 
-            {isDev && this.state.error?.stack && (
+            {this.state.error?.stack && (
               <details className="text-left text-[11px] bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-600 font-mono overflow-auto max-h-36">
                 <summary className="cursor-pointer font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-500" />

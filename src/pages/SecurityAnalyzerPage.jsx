@@ -190,6 +190,7 @@ export const SecurityAnalyzerPage = ({
 
   // Filter IOCs by tab
   const filteredIocs = (Array.isArray(iocs) ? iocs : []).filter(ioc => {
+    if (!ioc) return false;
     if (activeIocTab === 'ALL') return true;
     if (activeIocTab === 'IP') return ioc.type === 'IP';
     if (activeIocTab === 'URL') return ioc.type === 'URL';
@@ -199,9 +200,9 @@ export const SecurityAnalyzerPage = ({
   });
 
   // Active GeoIP record for details column
-  const activeGeoRecord = (selectedGeoIP && (Array.isArray(geoList) ? geoList : []).find(g => g.ip === selectedGeoIP)) 
+  const activeGeoRecord = (selectedGeoIP && (Array.isArray(geoList) ? geoList : []).find(g => g && g.ip === selectedGeoIP)) 
     || geoInfo 
-    || (Array.isArray(geoList) && geoList.length > 0 ? geoList[0] : null);
+    || (Array.isArray(geoList) && geoList.length > 0 ? (geoList.find(Boolean) || null) : null);
 
   return (
     <div className="space-y-6 pb-20 font-sans text-slate-900">
@@ -391,11 +392,11 @@ export const SecurityAnalyzerPage = ({
             Multi-Layer Evidence Fusion Breakdown
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {(fusion?.factors || []).map((factor) => {
-              const isFlagged = factor.status === 'FLAGGED' || factor.points > 0;
+            {(fusion?.factors || []).filter(Boolean).map((factor, fIdx) => {
+              const isFlagged = factor.status === 'FLAGGED' || (typeof factor.points === 'number' && factor.points > 0);
               return (
                 <div 
-                  key={factor.id || factor.category}
+                  key={factor.id || factor.category || fIdx}
                   className={`p-3.5 rounded-lg border text-xs space-y-2 ${
                     isFlagged 
                       ? 'bg-slate-50 border-slate-300' 
@@ -403,13 +404,13 @@ export const SecurityAnalyzerPage = ({
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-900">{factor.category}</span>
+                    <span className="font-semibold text-slate-900">{factor.category || 'Analysis Layer'}</span>
                     <span className="font-mono text-xs font-bold text-slate-800">
-                      {factor.points} / {factor.maxPoints} pts
+                      {factor.points ?? 0} / {factor.maxPoints ?? 0} pts
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
-                    {factor.evidence}
+                    {factor.evidence || 'No anomaly observed.'}
                   </p>
                 </div>
               );
@@ -599,25 +600,29 @@ export const SecurityAnalyzerPage = ({
                 Extracted NLP Threat Signals & Features
               </span>
               
-              {aiThreat.topFeatures && aiThreat.topFeatures.length > 0 ? (
+              {aiThreat.topFeatures && Array.isArray(aiThreat.topFeatures) && aiThreat.topFeatures.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {aiThreat.topFeatures.slice(0, 8).map((feat, idx) => (
-                    <span 
-                      key={idx}
-                      className="px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-xs font-mono text-slate-800"
-                    >
-                      {feat.term} {typeof feat.weight === 'number' && `(${feat.weight > 0 ? '+' : ''}${feat.weight})`}
-                    </span>
-                  ))}
+                  {aiThreat.topFeatures.filter(Boolean).slice(0, 8).map((feat, idx) => {
+                    const term = typeof feat === 'string' ? feat : (feat.term || 'feature');
+                    const weight = typeof feat === 'object' && typeof feat?.weight === 'number' ? feat.weight : null;
+                    return (
+                      <span 
+                        key={idx}
+                        className="px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-xs font-mono text-slate-800"
+                      >
+                        {term} {weight !== null && `(${weight > 0 ? '+' : ''}${weight})`}
+                      </span>
+                    );
+                  })}
                 </div>
-              ) : aiThreat.detectedIndicators && aiThreat.detectedIndicators.length > 0 ? (
+              ) : aiThreat.detectedIndicators && Array.isArray(aiThreat.detectedIndicators) && aiThreat.detectedIndicators.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {aiThreat.detectedIndicators.slice(0, 8).map((ind, idx) => (
+                  {aiThreat.detectedIndicators.filter(Boolean).slice(0, 8).map((ind, idx) => (
                     <span 
                       key={idx}
                       className="px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium"
                     >
-                      &quot;{ind.token}&quot; ({ind.category})
+                      &quot;{typeof ind === 'string' ? ind : (ind?.token || 'signal')}&quot; ({typeof ind === 'object' && ind?.category ? ind.category : 'Indicator'})
                     </span>
                   ))}
                 </div>
@@ -856,13 +861,18 @@ export const SecurityAnalyzerPage = ({
         </div>
 
         <div className="space-y-2.5">
-          {fusion?.verifiedReasons && fusion.verifiedReasons.length > 0 ? (
-            fusion.verifiedReasons.slice(0, 5).map((reason, idx) => (
-              <div key={idx} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{reason}</span>
-              </div>
-            ))
+          {fusion?.verifiedReasons && Array.isArray(fusion.verifiedReasons) && fusion.verifiedReasons.length > 0 ? (
+            fusion.verifiedReasons.filter(Boolean).slice(0, 5).map((reason, idx) => {
+              const reasonText = typeof reason === 'string'
+                ? reason
+                : (reason?.reason || reason?.text || reason?.summary || JSON.stringify(reason));
+              return (
+                <div key={idx} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{reasonText}</span>
+                </div>
+              );
+            })
           ) : (
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600">
               Review sender identity and preserve original RFC 822 email evidence for compliance record.
@@ -899,8 +909,8 @@ export const SecurityAnalyzerPage = ({
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
             <span className="text-[10px] uppercase font-semibold text-slate-500 block">SHA-256 Integrity Hash</span>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-slate-800 truncate text-[11px]" title={sha256Hash || 'Unavailable'}>
-                {sha256Hash ? `${sha256Hash.slice(0, 16)}...` : 'Unavailable'}
+              <span className="font-mono text-slate-800 truncate text-[11px]" title={sha256Hash ? String(sha256Hash) : 'Unavailable'}>
+                {sha256Hash ? `${String(sha256Hash).slice(0, 16)}...` : 'Unavailable'}
               </span>
               {sha256Hash && (
                 <button

@@ -175,9 +175,10 @@ export function synthesizeExecutiveSummary({
   }
 
   // Attachment findings
-  const maliciousAtts = (attachments || []).filter(a => a.isSuspicious || a.riskAssessment === 'CRITICAL' || a.riskAssessment === 'MALICIOUS');
+  const maliciousAtts = (attachments || []).filter(a => a && (a.isSuspicious || a.riskAssessment === 'CRITICAL' || a.riskAssessment === 'MALICIOUS'));
   if (maliciousAtts.length > 0) {
-    sentences.push(`Payload inspection detected ${maliciousAtts.length} high-risk attachment(s), notably "${maliciousAtts[0].filename}" exhibiting ${maliciousAtts[0].flag || 'extension mismatch or obfuscated binary headers'}.`);
+    const firstAtt = maliciousAtts[0] || {};
+    sentences.push(`Payload inspection detected ${maliciousAtts.length} high-risk attachment(s), notably "${firstAtt.filename || 'attachment'}" exhibiting ${firstAtt.flag || 'extension mismatch or obfuscated binary headers'}.`);
   }
 
   // Network infrastructure
@@ -228,23 +229,25 @@ export function generateAdvisoryRecommendations({
     });
   }
 
-  const badUrls = iocs.filter(i => i.type === 'URL' && (i.status === 'MALICIOUS' || i.status === 'SUSPICIOUS'));
+  const badUrls = (iocs || []).filter(i => i && i.type === 'URL' && (i.status === 'MALICIOUS' || i.status === 'SUSPICIOUS'));
   if (badUrls.length > 0) {
+    const firstUrl = badUrls[0] || {};
     recommendations.push({
       id: id++,
       priority: 'HIGH',
       action: `Perimeter DNS Sinkhole for Flagged URLs (${badUrls.length} observed)`,
-      rationale: `Disrupt credential harvesting infrastructure associated with target URL: ${badUrls[0].value.slice(0, 50)}...`
+      rationale: `Disrupt credential harvesting infrastructure associated with target URL: ${String(firstUrl.value || '').slice(0, 50)}...`
     });
   }
 
-  const badAtts = (attachments || []).filter(a => a.isSuspicious || a.riskAssessment === 'CRITICAL' || a.riskAssessment === 'MALICIOUS');
+  const badAtts = (attachments || []).filter(a => a && (a.isSuspicious || a.riskAssessment === 'CRITICAL' || a.riskAssessment === 'MALICIOUS'));
   if (badAtts.length > 0) {
+    const firstAtt = badAtts[0] || {};
     recommendations.push({
       id: id++,
       priority: 'HIGH',
-      action: `Isolate Payload & Query EDR for SHA-256 [${(badAtts[0].sha256 || '').slice(0, 16)}...]`,
-      rationale: `Executable or obfuscated file attachment "${badAtts[0].filename}" detected. Validate endpoint execution status across enterprise fleet.`
+      action: `Isolate Payload & Query EDR for SHA-256 [${(firstAtt.sha256 || '').slice(0, 16)}...]`,
+      rationale: `Executable or obfuscated file attachment "${firstAtt.filename || 'attachment'}" detected. Validate endpoint execution status across enterprise fleet.`
     });
   }
 
@@ -405,9 +408,9 @@ export async function buildForensicReport(analysisResult, options = {}) {
   };
 
   // IOC Analysis Section
-  const iocAnalysis = iocs.map(ioc => ({
-    type: ioc.type,
-    value: sanitizeReportString(ioc.value),
+  const iocAnalysis = (iocs || []).filter(Boolean).map(ioc => ({
+    type: ioc.type || 'UNKNOWN',
+    value: sanitizeReportString(ioc.value || ''),
     source: ioc.source || 'Email Ingress',
     risk: ioc.status || 'SUSPICIOUS',
     confidence: ioc.confidence || 85,
@@ -430,7 +433,7 @@ export async function buildForensicReport(analysisResult, options = {}) {
       lat: geoInfo.lat,
       lon: geoInfo.lon
     } : null,
-    resolvedHops: geoList.map(g => ({
+    resolvedHops: (geoList || []).filter(Boolean).map(g => ({
       ip: g.ip,
       country: g.country,
       asn: g.asn,
@@ -441,9 +444,10 @@ export async function buildForensicReport(analysisResult, options = {}) {
   };
 
   // Attachment Forensics Section
+  const safeReportAttachments = (Array.isArray(attachments) ? attachments : []).filter(Boolean);
   const attachmentAnalysis = {
-    count: attachments.length,
-    attachments: attachments.map((att, idx) => ({
+    count: safeReportAttachments.length,
+    attachments: safeReportAttachments.map((att, idx) => ({
       index: idx + 1,
       filename: sanitizeReportString(att.filename || `attachment-${idx + 1}`),
       size: att.size || '0 KB',
@@ -464,7 +468,7 @@ export async function buildForensicReport(analysisResult, options = {}) {
   const evidenceFusion = {
     threatScore,
     riskLevel,
-    factors: (fusion.factors || []).map(f => ({
+    factors: (fusion.factors || []).filter(Boolean).map(f => ({
       id: f.id,
       category: f.category,
       name: f.name,
@@ -488,7 +492,7 @@ export async function buildForensicReport(analysisResult, options = {}) {
     ...(emailAuthentication.spf.record ? [`SPF DNS Record: ${emailAuthentication.spf.record}`] : []),
     ...(emailAuthentication.dmarc.status.includes('RECORD') ? [`DMARC DNS Policy Tag: p=${emailAuthentication.dmarc.policy}`] : []),
     ...(attachmentAnalysis.attachments.map(a => `Attachment SHA-256 [${a.filename}]: ${a.sha256}`)),
-    ...(iocs.map(i => `Extracted IOC [${i.type}]: ${i.value}`))
+    ...((iocs || []).filter(Boolean).map(i => `Extracted IOC [${i.type}]: ${i.value}`))
   ];
 
   const inferredIntelligence = [

@@ -16,8 +16,8 @@ export const AttachmentForensicsCard = ({ attachments = [] }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copiedField, setCopiedField] = useState(null);
 
-  const safeAttachments = Array.isArray(attachments) ? attachments : [];
-  const currentAttachment = safeAttachments[selectedIndex] || safeAttachments[0];
+  const safeAttachments = (Array.isArray(attachments) ? attachments : []).filter(Boolean);
+  const currentAttachment = safeAttachments[selectedIndex] || safeAttachments[0] || null;
 
   const handleCopy = (text, fieldName) => {
     if (!text) return;
@@ -28,7 +28,7 @@ export const AttachmentForensicsCard = ({ attachments = [] }) => {
     }
   };
 
-  if (safeAttachments.length === 0) {
+  if (safeAttachments.length === 0 || !currentAttachment) {
     return (
       <div className="rounded-xl bg-white border border-slate-200 p-5 font-sans shadow-xs">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -57,14 +57,14 @@ export const AttachmentForensicsCard = ({ attachments = [] }) => {
 
   const observed = currentAttachment?.observed || {};
   const inferred = currentAttachment?.inferred || {};
-  const indicators = observed.indicators || [];
+  const indicators = Array.isArray(observed.indicators) ? observed.indicators : [];
 
-  const isSuspicious = currentAttachment?.isSuspicious || inferred.assessment === 'SUSPICIOUS' || inferred.assessment === 'MALICIOUS';
+  const isSuspicious = Boolean(currentAttachment?.isSuspicious || inferred.assessment === 'SUSPICIOUS' || inferred.assessment === 'MALICIOUS');
   const isMalicious = inferred.assessment === 'MALICIOUS';
 
   // Check type mismatch
-  const hasTypeMismatch = currentAttachment?.typeMismatch || 
-    (currentAttachment?.category === 'EXECUTABLE' && currentAttachment?.filename && !currentAttachment.filename.toLowerCase().endsWith('.exe'));
+  const hasTypeMismatch = Boolean(currentAttachment?.typeMismatch || 
+    (currentAttachment?.category === 'EXECUTABLE' && typeof currentAttachment?.filename === 'string' && !currentAttachment.filename.toLowerCase().endsWith('.exe')));
 
   // Get indicator icon
   const getIndicatorIcon = (severity) => {

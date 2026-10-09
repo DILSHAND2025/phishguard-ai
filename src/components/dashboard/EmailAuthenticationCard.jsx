@@ -32,18 +32,16 @@ export const EmailAuthenticationCard = ({ emailAuth }) => {
     );
   }
 
-  const {
-    fromDomain = '',
-    returnPathDomain = '',
-    spf = {},
-    dkim = {},
-    dmarc = {},
-    alignment = {},
-    observedEvidence = {},
-    observedEvidenceList = [],
-    inferredEvidenceList = [],
-    riskSignals = []
-  } = emailAuth;
+  const fromDomain = emailAuth?.fromDomain || '';
+  const returnPathDomain = emailAuth?.returnPathDomain || '';
+  const spf = (emailAuth?.spf && typeof emailAuth.spf === 'object') ? emailAuth.spf : {};
+  const dkim = (emailAuth?.dkim && typeof emailAuth.dkim === 'object') ? emailAuth.dkim : {};
+  const dmarc = (emailAuth?.dmarc && typeof emailAuth.dmarc === 'object') ? emailAuth.dmarc : {};
+  const alignment = (emailAuth?.alignment && typeof emailAuth.alignment === 'object') ? emailAuth.alignment : {};
+  const observedEvidence = (emailAuth?.observedEvidence && typeof emailAuth.observedEvidence === 'object') ? emailAuth.observedEvidence : {};
+  const observedEvidenceList = Array.isArray(emailAuth?.observedEvidenceList) ? emailAuth.observedEvidenceList : [];
+  const inferredEvidenceList = Array.isArray(emailAuth?.inferredEvidenceList) ? emailAuth.inferredEvidenceList : [];
+  const riskSignals = Array.isArray(emailAuth?.riskSignals) ? emailAuth.riskSignals : [];
 
   const mtaAuth = observedEvidence?.mtaAuthentication || {};
   const dnsForensics = observedEvidence?.dnsForensics || {};
