@@ -62,8 +62,8 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
   return (
     <>
       <aside 
-        className={`w-[230px] shrink-0 flex flex-col justify-between border-r border-slate-200 bg-white text-slate-700 transition-all duration-200 z-30
-          ${isMobileOpen ? 'fixed inset-y-0 left-0 shadow-2xl flex' : 'hidden md:flex'}`}
+        className={`w-[230px] shrink-0 flex flex-col justify-between border-r border-slate-200 bg-white text-slate-700 transition-all duration-200
+          ${isMobileOpen ? 'fixed inset-y-0 left-0 shadow-2xl flex z-50' : 'hidden md:flex md:sticky md:top-14 md:self-start md:h-[calc(100vh-3.5rem)] overflow-y-auto z-30'}`}
         style={{ minHeight: 'calc(100vh - 3.5rem)' }}
       >
         {/* Top Section */}
@@ -161,7 +161,7 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       {isMobileOpen && (
         <div 
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-900/40 z-20 md:hidden backdrop-blur-2xs"
+          className="fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-2xs"
         />
       )}
 

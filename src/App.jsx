@@ -689,7 +689,7 @@ function App() {
       />
 
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-w-0">
         
         {/* Collapsible/Sticky Sidebar only shown in Analyst views */}
         {!isUserEmailView && (
@@ -704,7 +704,7 @@ function App() {
         )}
 
         {/* Dynamic Page Content Viewport */}
-        <main className={`flex-1 overflow-y-auto ${
+        <main className={`flex-1 min-w-0 ${
           isUserEmailView 
             ? 'p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]' 
             : 'p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]'
