@@ -63,38 +63,24 @@ export const LoginPage = ({ onLoginSuccess }) => {
   }, [clientId, onLoginSuccess]);
 
   // Primary "Sign in with Google" click handler
-  const handleGoogleSignInClick = () => {
-    setIsLoading(true);
-    setErrorMsg('');
+  
+const handleGoogleSignInClick = () => {
+  setErrorMsg('');
 
-    // If real Google client ID is configured and GIS is ready
-    if (clientId && window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            setIsLoading(false);
-            setErrorMsg('Google login prompt blocked or skipped. Please use the Google Sign-in button above.');
-          }
-        });
-      } catch {
-        setIsLoading(false);
-        setErrorMsg('Error initializing Google login prompt.');
-      }
-    } else {
-      // Local development fallback
-      setTimeout(() => {
-        const demoGoogleUser = storeUserSession({
-          id: 'google-uid-108492049281749',
-          name: 'Deepak Raghavan (Analyst-Alpha)',
-          email: 'deepak.raghavan@gov-organization.in',
-          picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          authMethod: 'google-oauth2-dev'
-        });
-        setIsLoading(false);
-        onLoginSuccess?.(demoGoogleUser);
-      }, 600);
-    }
-  };
+  if (!clientId || !window.google?.accounts?.id) {
+    setErrorMsg(
+      'Google Sign-In is not ready. Please refresh the page and try again.'
+    );
+    return;
+  }
+
+  // The official Google button rendered by renderButton()
+  // handles account selection. Do not use One Tap here.
+  setErrorMsg(
+    'Please use the official Google sign-in button above.'
+  );
+};
+
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col items-center justify-center p-4 font-sans">
