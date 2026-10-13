@@ -688,8 +688,8 @@ function App() {
         onToggleMobile={() => setIsMobileNavOpen(prev => !prev)}
       />
 
-      {/* Main Workspace Layout */}
-      <div className="flex-1 flex min-w-0">
+      {/* Main Workspace Layout (offset with pt-14 for fixed top navbar) */}
+      <div className="flex-1 flex min-w-0 pt-14">
         
         {/* Collapsible/Sticky Sidebar only shown in Analyst views */}
         {!isUserEmailView && (

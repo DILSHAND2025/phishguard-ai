@@ -161,7 +161,7 @@ export const Sidebar = ({ currentView, onViewChange, currentUser, onLogout, isMo
       {isMobileOpen && (
         <div 
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-2xs"
+          className="fixed inset-0 bg-slate-900/40 z-[45] md:hidden backdrop-blur-2xs"
         />
       )}
 

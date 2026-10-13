@@ -318,7 +318,7 @@ export const ForensicGeoMap = ({
         
         {/* Left/Main: Interactive Leaflet Map Container */}
         <div className="lg:col-span-8 flex flex-col space-y-2">
-          <div className="relative w-full h-[340px] sm:h-[380px] rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+          <div className="relative w-full h-[340px] sm:h-[380px] rounded-lg overflow-hidden border border-slate-200 bg-slate-100 isolate">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
 
             {/* If no valid coordinates exist */}

@@ -41,7 +41,10 @@ export const Navbar = ({
   if (isUserEmailView) {
     return (
       <>
-        <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs">
+        <header 
+          className="maverick-navbar-fixed fixed top-0 left-0 right-0 w-full z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, width: '100%' }}
+        >
           <div className="max-w-7xl mx-auto flex h-14 items-center justify-between px-4 sm:px-6">
             
             {/* Left: Minimal MAVERICK Brand */}
@@ -173,7 +176,10 @@ export const Navbar = ({
   // Security Analyst Workspace Header
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs">
+      <header 
+        className="maverick-navbar-fixed fixed top-0 left-0 right-0 w-full z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md shadow-xs"
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, width: '100%' }}
+      >
         <div className="flex h-14 items-center justify-between px-3 sm:px-5">
           
           {/* Left: Mobile Toggle & Brand */}
