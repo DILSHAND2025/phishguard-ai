@@ -9,18 +9,21 @@ import {
   Trash2, 
   Loader2, 
   RefreshCw,
-  FileText
+  FileText,
+  Clock,
+  XCircle
 } from 'lucide-react';
 import { buildForensicReport } from '../services/forensicReportService';
 import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilder';
+import { getExplainableDiagnosticChecks } from '../services/diagnosticHelper';
 
 const ANALYSIS_STEPS = [
-  { id: 'reading', label: 'Reading email' },
-  { id: 'headers', label: 'Extracting headers' },
-  { id: 'threat', label: 'Running threat detection' },
-  { id: 'network', label: 'Checking network indicators' },
-  { id: 'auth', label: 'Checking authentication' },
-  { id: 'assessment', label: 'Generating security assessment' }
+  { id: 'reading', label: 'Reading email & computing SHA-256' },
+  { id: 'headers', label: 'Extracting headers & sender identity' },
+  { id: 'threat', label: 'Running ML intent detection' },
+  { id: 'network', label: 'Checking network indicators & GeoIP' },
+  { id: 'auth', label: 'Checking SPF, DKIM, and DMARC' },
+  { id: 'assessment', label: 'Synthesizing evidence fusion & saving case' }
 ];
 
 export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis, onRetrySave }) => {
@@ -38,15 +41,44 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
   const [urlInput, setUrlInput] = useState('');
   const [rawInput, setRawInput] = useState('');
 
-  // Analysis / Loading state: 'idle' | 'analyzing' | 'completed'
+  // Analysis / Loading state: 'idle' | 'queued' | 'analyzing' | 'completed' | 'failed'
   const [analysisStatus, setAnalysisStatus] = useState(currentAnalysis ? 'completed' : 'idle');
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isRetryingSave, setIsRetryingSave] = useState(false);
+  const [activeLedgerTab, setActiveLedgerTab] = useState('ALL');
 
   const fileInputRef = useRef(null);
 
-  // Handle file drop/selection
+  // Core execution runner that coordinates states
+  const executeAnalysis = async (payloadToAnalyze) => {
+    if (!payloadToAnalyze) return;
+    setFileError(null);
+    setAnalysisStatus('analyzing');
+    setCurrentStepIndex(0);
+
+    const stepInterval = setInterval(() => {
+      setCurrentStepIndex(prev => {
+        if (prev < ANALYSIS_STEPS.length - 1) return prev + 1;
+        return prev;
+      });
+    }, 280);
+
+    try {
+      if (onRunAnalysis) {
+        await onRunAnalysis(payloadToAnalyze);
+      }
+      clearInterval(stepInterval);
+      setCurrentStepIndex(ANALYSIS_STEPS.length);
+      setAnalysisStatus('completed');
+    } catch (err) {
+      clearInterval(stepInterval);
+      setAnalysisStatus('failed');
+      setFileError('Analysis error: ' + (err.message || 'Failed to analyze email.'));
+    }
+  };
+
+  // Handle file drop/selection with automatic triggering
   const processFile = (file) => {
     if (!file) return;
     setFileError(null);
@@ -61,11 +93,13 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
     const reader = new FileReader();
     reader.onerror = () => {
       setFileError('Could not read file. Please ensure it is accessible.');
+      setAnalysisStatus('failed');
     };
     reader.onload = (e) => {
       const text = e.target?.result;
       if (!text || typeof text !== 'string' || !text.trim()) {
         setFileError('The selected file appears to be empty.');
+        setAnalysisStatus('failed');
         return;
       }
       setSelectedFile({
@@ -73,6 +107,12 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
         size: (file.size / 1024).toFixed(1) + ' KB'
       });
       setFileContent(text);
+
+      // Auto-trigger analysis immediately on file selection/drop
+      setAnalysisStatus('queued');
+      setTimeout(() => {
+        executeAnalysis(text);
+      }, 400);
     };
     reader.readAsText(file);
   };
@@ -104,9 +144,10 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
     setSelectedFile(null);
     setFileContent('');
     setFileError(null);
+    setAnalysisStatus('idle');
   };
 
-  // Run analysis pipeline
+  // Run analysis pipeline manually for alternative tabs or retry
   const handleStartAnalysis = async () => {
     let payloadToAnalyze = null;
 
@@ -127,7 +168,7 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
         setFileError('Please enter a suspicious URL.');
         return;
       }
-      // Wrap URL in minimal RFC 822 format so full parser and extractors process it
+      // Wrap URL in RFC 822 format so full parser and extractors process it
       payloadToAnalyze = `From: submission@user-inbox.local\nTo: analyst@maverick.security\nSubject: Suspicious URL Analysis\n\nSuspicious Link: ${urlInput.trim()}`;
     } else if (activeTab === 'raw') {
       if (!rawInput.trim()) {
@@ -137,30 +178,10 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
       payloadToAnalyze = rawInput.trim();
     }
 
-    setFileError(null);
-    setAnalysisStatus('analyzing');
-    setCurrentStepIndex(0);
-
-    // Staged step runner that coordinates with actual pipeline execution
-    const stepInterval = setInterval(() => {
-      setCurrentStepIndex(prev => {
-        if (prev < ANALYSIS_STEPS.length - 1) return prev + 1;
-        return prev;
-      });
-    }, 280);
-
-    try {
-      if (onRunAnalysis) {
-        await onRunAnalysis(payloadToAnalyze);
-      }
-      clearInterval(stepInterval);
-      setCurrentStepIndex(ANALYSIS_STEPS.length);
-      setAnalysisStatus('completed');
-    } catch (err) {
-      clearInterval(stepInterval);
-      setAnalysisStatus('idle');
-      setFileError('Analysis error: ' + (err.message || 'Failed to analyze email.'));
-    }
+    setAnalysisStatus('queued');
+    setTimeout(() => {
+      executeAnalysis(payloadToAnalyze);
+    }, 350);
   };
 
   const handleDownloadReport = async () => {
@@ -218,63 +239,24 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
     threatNarrative = 'MAVERICK detected anomalies in sender authentication or link structure.';
   }
 
-  // Generate "Why was this email flagged?" from real evidence
-  const flaggedReasons = [];
-
-  const aiProb = currentAnalysis?.aiThreat?.phishingProbability;
-  if (typeof aiProb === 'number' && aiProb >= 50) {
-    flaggedReasons.push({
-      title: 'Phishing indicators detected',
-      detail: `AI language analysis identified high probability of phishing intent (${aiProb}% confidence).`
-    });
-  }
-
-  const auth = currentAnalysis?.emailAuth || currentAnalysis?.email?.emailAuth;
-  const spfFail = auth?.spf?.status === 'FAIL' || auth?.observedEvidence?.mtaAuthentication?.observedSpfVerdict === 'fail';
-  const dkimFail = auth?.dkim?.status === 'FAIL' || auth?.observedEvidence?.mtaAuthentication?.observedDkimVerdict === 'fail';
-  const dmarcFail = auth?.dmarc?.status === 'FAIL';
-  const replyMismatch = auth?.inferredEvidence?.replyToMismatch;
-
-  if (spfFail || dkimFail || dmarcFail || replyMismatch) {
-    const failedProtocols = [];
-    if (spfFail) failedProtocols.push('SPF');
-    if (dkimFail) failedProtocols.push('DKIM');
-    if (dmarcFail) failedProtocols.push('DMARC');
-    if (replyMismatch) failedProtocols.push('Reply-To address mismatch');
-    
-    flaggedReasons.push({
-      title: 'Authentication concerns',
-      detail: `Sender authentication failed: ${failedProtocols.join(', ')}.`
-    });
-  }
-
-  const iocs = currentAnalysis?.iocs || [];
-  const suspiciousUrls = iocs.filter(i => i.type === 'URL' && i.status === 'MALICIOUS');
-  const suspiciousIps = iocs.filter(i => i.type === 'IP' && (i.status === 'MALICIOUS' || i.status === 'SUSPICIOUS'));
-
-  if (suspiciousUrls.length > 0 || suspiciousIps.length > 0) {
-    flaggedReasons.push({
-      title: 'Suspicious network/URL indicators',
-      detail: `${suspiciousUrls.length} potentially dangerous link(s) and ${suspiciousIps.length} suspicious network address(es) identified.`
-    });
-  }
-
-  const attachments = currentAnalysis?.email?.attachments || [];
-  const suspiciousAtts = attachments.filter(a => a.isSuspicious);
-  if (suspiciousAtts.length > 0) {
-    flaggedReasons.push({
-      title: 'Suspicious attachment indicators',
-      detail: `Attachment "${suspiciousAtts[0].filename}" was flagged due to risky executable format or double extension.`
-    });
-  }
-
-  // Fallback if none of the above specific rules triggered but score was elevated
-  if (flaggedReasons.length === 0 && score >= 30) {
-    flaggedReasons.push({
-      title: 'Suspicious email characteristics',
-      detail: 'Abnormal routing hops and linguistic urgency patterns were identified during automated inspection.'
-    });
-  }
+  // Extract explainable diagnostic verification ledger from real evidence (zero fabrication)
+  const diagnostic = getExplainableDiagnosticChecks(currentAnalysis);
+  const { failedChecks, passedChecks, unavailableChecks, skippedChecks, flaggedReasons } = diagnostic;
+  const allChecks = [
+    ...failedChecks,
+    ...passedChecks,
+    ...unavailableChecks,
+    ...skippedChecks
+  ];
+  const displayedChecks = activeLedgerTab === 'ALL'
+    ? allChecks
+    : activeLedgerTab === 'FAILED'
+      ? failedChecks
+      : activeLedgerTab === 'PASSED'
+        ? passedChecks
+        : activeLedgerTab === 'UNAVAILABLE'
+          ? unavailableChecks
+          : skippedChecks;
 
   return (
     <div className="max-w-3xl mx-auto py-6 sm:py-10 px-4 space-y-8 font-sans">
@@ -287,6 +269,66 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
         accept=".eml,.EML,.msg,.MSG,.txt,message/rfc822,text/plain"
         className="hidden"
       />
+
+      {/* QUEUED STATE */}
+      {analysisStatus === 'queued' && (
+        <div className="rounded-xl bg-white border border-slate-200 p-8 sm:p-12 text-center space-y-5 shadow-xs">
+          <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-cyan-50 border border-cyan-200 flex items-center justify-center text-cyan-700 animate-pulse">
+              <Clock className="w-6 h-6" />
+            </div>
+          </div>
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200 mb-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-600 animate-ping"></span>
+              PROCESSING STATE: QUEUED
+            </span>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Queued for Multi-Layer Analysis</h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Email payload received, hash computed, and scheduled for execution across forensic, ML, and DNS verification layers.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* FAILED STATE */}
+      {analysisStatus === 'failed' && (
+        <div className="rounded-xl bg-white border border-red-200 p-8 sm:p-10 text-center space-y-5 shadow-xs">
+          <div className="w-14 h-14 mx-auto rounded-full bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
+            <XCircle className="w-7 h-7" />
+          </div>
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-red-50 text-red-700 border border-red-200 mb-2">
+              PROCESSING STATE: FAILED
+            </span>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Analysis Failed</h2>
+            <p className="text-xs text-red-600 mt-1 max-w-md mx-auto">
+              {fileError || 'The forensic pipeline encountered an unexpected error while processing the email.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+            <button
+              onClick={() => {
+                if (fileContent) {
+                  executeAnalysis(fileContent);
+                } else {
+                  handleStartAnalysis();
+                }
+              }}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Analysis</span>
+            </button>
+            <button
+              onClick={handleResetForNewAnalysis}
+              className="px-4 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            >
+              Choose Another Email
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 1. LOADING STATE */}
       {analysisStatus === 'analyzing' && (
@@ -461,6 +503,124 @@ export const EmailAnalysisPage = ({ onViewChange, currentAnalysis, onRunAnalysis
                   <span>No suspicious indicators detected. Email conforms to expected legitimate standards.</span>
                 </div>
               )}
+            </div>
+
+            {/* Explainable Verification Checks Matrix (Failed, Passed, Unavailable, Not Performed) */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Forensic Verification Ledger
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Transparent classification of empirical findings, active tests, and service telemetry
+                  </p>
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-mono flex-wrap">
+                  <button
+                    onClick={() => setActiveLedgerTab('ALL')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      activeLedgerTab === 'ALL' ? 'bg-white font-bold text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All ({allChecks.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveLedgerTab('FAILED')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      activeLedgerTab === 'FAILED' ? 'bg-red-50 text-red-700 font-bold border border-red-200' : 'text-slate-600 hover:text-red-700'
+                    }`}
+                  >
+                    Failed ({failedChecks.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveLedgerTab('PASSED')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      activeLedgerTab === 'PASSED' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200' : 'text-slate-600 hover:text-emerald-700'
+                    }`}
+                  >
+                    Passed ({passedChecks.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveLedgerTab('UNAVAILABLE')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      activeLedgerTab === 'UNAVAILABLE' ? 'bg-amber-50 text-amber-800 font-bold border border-amber-200' : 'text-slate-600 hover:text-amber-700'
+                    }`}
+                  >
+                    Unavailable ({unavailableChecks.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveLedgerTab('SKIPPED')}
+                    className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                      activeLedgerTab === 'SKIPPED' ? 'bg-slate-200 font-bold text-slate-800' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Not Run ({skippedChecks.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Check items list */}
+              <div className="space-y-2 mt-2">
+                {displayedChecks.map((chk, cIdx) => {
+                  const isFailed = chk.status === 'FAILED';
+                  const isPassed = chk.status === 'PASSED';
+                  const isUnavail = chk.status === 'UNAVAILABLE';
+
+                  return (
+                    <div
+                      key={chk.id || cIdx}
+                      className={`p-3 rounded-lg border text-xs transition-colors ${
+                        isFailed 
+                          ? 'bg-red-50/30 border-red-200' 
+                          : isPassed 
+                            ? 'bg-emerald-50/20 border-emerald-100' 
+                            : isUnavail
+                              ? 'bg-amber-50/20 border-amber-200'
+                              : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                            isFailed ? 'bg-red-100 text-red-700' :
+                            isPassed ? 'bg-emerald-100 text-emerald-700' :
+                            isUnavail ? 'bg-amber-100 text-amber-800' :
+                            'bg-slate-200 text-slate-700'
+                          }`}>
+                            {chk.status === 'NOT_PERFORMED' ? 'NOT PERFORMED' : chk.status}
+                          </span>
+                          <span className="font-semibold text-slate-900">{chk.title}</span>
+                          <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({chk.layer})</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {chk.severity && (
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              chk.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                              chk.severity === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                              'bg-amber-100 text-amber-800'
+                            }`}>
+                              {chk.severity}
+                            </span>
+                          )}
+                          {typeof chk.confidence === 'number' && (
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {chk.confidence}% Conf.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 leading-relaxed mt-1">
+                        {chk.details || chk.reason}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Action buttons as specified */}

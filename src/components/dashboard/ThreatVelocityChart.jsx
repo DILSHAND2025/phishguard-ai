@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export const ThreatVelocityChart = () => {
+export const ThreatVelocityChart = ({ loading = false, error = null, dbStats = null }) => {
   const [activeMetric, setActiveMetric] = useState('all');
 
   return (
@@ -55,9 +55,11 @@ export const ThreatVelocityChart = () => {
             <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-900">
               Threat Ingress Velocity & Blocking
             </h3>
+            {loading && <span className="text-[10px] text-cyan-600 font-mono animate-pulse">Syncing...</span>}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             24-Hour continuous email telemetry across gateway perimeter
+            {dbStats && typeof dbStats.totalCases === 'number' ? ` (${dbStats.totalCases} stored cases)` : ''}
           </p>
         </div>
 

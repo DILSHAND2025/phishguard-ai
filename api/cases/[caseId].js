@@ -4,7 +4,7 @@
  */
 
 import { setCorsHeaders, parseJsonBody, sendResponse } from '../_utils.js';
-import { getCaseByCaseId, updateCaseStatus, DatabaseUnavailableError } from '../../server/caseDatabase.js';
+import { getCaseByCaseId, updateCaseStatus, addCaseNote, DatabaseUnavailableError } from '../../server/caseDatabase.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
@@ -48,10 +48,18 @@ export default async function handler(req, res) {
   if (req.method === 'PATCH') {
     try {
       const body = await parseJsonBody(req);
-      if (!body.status) {
-        return sendResponse(res, 400, { success: false, error: 'Missing status parameter in update request' });
+      if (!body.status && !body.note && !body.noteText) {
+        return sendResponse(res, 400, { success: false, error: 'Missing status or note parameter in update request' });
       }
-      const updated = await updateCaseStatus(caseId, body.status);
+      let updated;
+      if (body.status) {
+        updated = await updateCaseStatus(caseId, body.status, {
+          actor: body.actor || body.author,
+          note: body.note || body.noteText
+        });
+      } else {
+        updated = await addCaseNote(caseId, body.note || body.noteText, body.actor || body.author);
+      }
       if (!updated) {
         return sendResponse(res, 404, { success: false, error: `Case ${caseId} not found` });
       }

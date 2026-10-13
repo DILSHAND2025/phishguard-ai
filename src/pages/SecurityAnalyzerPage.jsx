@@ -20,6 +20,7 @@ import { EmailAuthenticationCard } from '../components/dashboard/EmailAuthentica
 import { AttachmentForensicsCard } from '../components/dashboard/AttachmentForensicsCard.jsx';
 import { buildForensicReport } from '../services/forensicReportService.js';
 import { generateForensicPdf, downloadPdfInBrowser } from '../services/pdfBuilder.js';
+import { getExplainableDiagnosticChecks } from '../services/diagnosticHelper.js';
 
 export const SecurityAnalyzerPage = ({ 
   currentAnalysis, 
@@ -33,6 +34,7 @@ export const SecurityAnalyzerPage = ({
   const [copiedRawHeaders, setCopiedRawHeaders] = useState(false);
   const [copiedHash, setCopiedHash] = useState(false);
   const [activeIocTab, setActiveIocTab] = useState('ALL');
+  const [activeLedgerTab, setActiveLedgerTab] = useState('ALL');
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingJson, setExportingJson] = useState(false);
   const [isRetryingSave, setIsRetryingSave] = useState(false);
@@ -97,6 +99,25 @@ export const SecurityAnalyzerPage = ({
   const riskLevel = (fusion?.riskLevel || currentAnalysis?.riskLevel || (typeof threatScore === 'number' && threatScore >= 80 ? 'CRITICAL' : typeof threatScore === 'number' && threatScore >= 60 ? 'HIGH' : typeof threatScore === 'number' && threatScore >= 30 ? 'MEDIUM' : 'LOW')).toUpperCase();
   const sha256Hash = caseItem?.sha256 || email?.sha256 || currentAnalysis?.report?.evidenceIntegrity?.contentHashSha256 || null;
   const classification = currentAnalysis?.aiThreat?.classification || currentAnalysis?.classification || (typeof threatScore === 'number' && threatScore >= 80 ? 'Credential Phishing' : typeof threatScore === 'number' && threatScore >= 60 ? 'Suspicious Impersonation' : typeof threatScore === 'number' && threatScore >= 30 ? 'Suspicious Anomaly' : 'Clean Communication');
+
+  // Explainable diagnostic ledger computation
+  const diagnosticLedger = getExplainableDiagnosticChecks(currentAnalysis);
+  const { failedChecks = [], passedChecks = [], unavailableChecks = [], skippedChecks = [] } = diagnosticLedger;
+  const allDiagnosticChecks = [
+    ...failedChecks,
+    ...passedChecks,
+    ...unavailableChecks,
+    ...skippedChecks
+  ];
+  const displayedDiagnosticChecks = activeLedgerTab === 'ALL'
+    ? allDiagnosticChecks
+    : activeLedgerTab === 'FAILED'
+      ? failedChecks
+      : activeLedgerTab === 'PASSED'
+        ? passedChecks
+        : activeLedgerTab === 'UNAVAILABLE'
+          ? unavailableChecks
+          : skippedChecks;
 
   // 2. Threat Summary Metric Values
   const isMlAvailable = Boolean(aiThreat && aiThreat.isMlAvailable);
@@ -423,6 +444,127 @@ export const SecurityAnalyzerPage = ({
                   </div>
                   <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
                     {factor.evidence || 'No anomaly observed.'}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Explainable Forensic Verification Ledger (Failed, Passed, Unavailable, Not Performed) */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Explainable Forensic Verification Ledger
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Transparent verification matrix separating verified violations, passing checks, offline telemetry, and skipped rules
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[11px] font-mono flex-wrap">
+              <button
+                type="button"
+                onClick={() => setActiveLedgerTab('ALL')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeLedgerTab === 'ALL' ? 'bg-white font-bold text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All ({allDiagnosticChecks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLedgerTab('FAILED')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeLedgerTab === 'FAILED' ? 'bg-red-50 text-red-700 font-bold border border-red-200' : 'text-slate-600 hover:text-red-700'
+                }`}
+              >
+                Failed ({failedChecks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLedgerTab('PASSED')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeLedgerTab === 'PASSED' ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200' : 'text-slate-600 hover:text-emerald-700'
+                }`}
+              >
+                Passed ({passedChecks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLedgerTab('UNAVAILABLE')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeLedgerTab === 'UNAVAILABLE' ? 'bg-amber-50 text-amber-800 font-bold border border-amber-200' : 'text-slate-600 hover:text-amber-700'
+                }`}
+              >
+                Unavailable ({unavailableChecks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLedgerTab('SKIPPED')}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeLedgerTab === 'SKIPPED' ? 'bg-slate-200 font-bold text-slate-800' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Not Run ({skippedChecks.length})
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 mt-2">
+            {displayedDiagnosticChecks.map((chk, cIdx) => {
+              const isFailed = chk.status === 'FAILED';
+              const isPassed = chk.status === 'PASSED';
+              const isUnavail = chk.status === 'UNAVAILABLE';
+
+              return (
+                <div
+                  key={chk.id || cIdx}
+                  className={`p-3 rounded-lg border text-xs transition-colors ${
+                    isFailed 
+                      ? 'bg-red-50/30 border-red-200' 
+                      : isPassed 
+                        ? 'bg-emerald-50/20 border-emerald-100' 
+                        : isUnavail
+                          ? 'bg-amber-50/20 border-amber-200'
+                          : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                        isFailed ? 'bg-red-100 text-red-700' :
+                        isPassed ? 'bg-emerald-100 text-emerald-700' :
+                        isUnavail ? 'bg-amber-100 text-amber-800' :
+                        'bg-slate-200 text-slate-700'
+                      }`}>
+                        {chk.status === 'NOT_PERFORMED' ? 'NOT PERFORMED' : chk.status}
+                      </span>
+                      <span className="font-semibold text-slate-900">{chk.title}</span>
+                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({chk.layer})</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {chk.severity && (
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                          chk.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                          chk.severity === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {chk.severity}
+                        </span>
+                      )}
+                      {typeof chk.confidence === 'number' && (
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {chk.confidence}% Conf.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 leading-relaxed mt-1">
+                    {chk.details || chk.reason}
                   </p>
                 </div>
               );
@@ -841,25 +983,47 @@ export const SecurityAnalyzerPage = ({
         </div>
 
         <div className="space-y-2 text-xs">
-          {[
-            { step: '1', name: 'Email received and ingested into inspection sandbox', time: 'T0' },
-            { step: '2', name: 'RFC 822 MIME boundaries and headers parsed', time: 'T0 + 34ms' },
-            { step: '3', name: 'Network and file IOCs extracted and deduplicated', time: 'T0 + 41ms' },
-            { step: '4', name: 'AI threat model evaluation completed (TF-IDF + LR)', time: 'T0 + 82ms' },
-            { step: '5', name: 'DNS & email authentication verification completed', time: 'T0 + 130ms' },
-            { step: '6', name: 'Evidence fusion and multi-layer threat score synthesized', time: 'T0 + 168ms' },
-            { step: '7', name: 'Tamper-evident forensic report compiled and SHA-256 sealed', time: 'T0 + 206ms' }
-          ].map((item, idx) => (
-            <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-mono font-bold text-slate-700">
-                  {item.step}
-                </span>
-                <span className="text-slate-800 text-xs font-medium">{item.name}</span>
+          {(() => {
+            const activeTimeline = currentAnalysis.timeline || (caseItem && caseItem.timeline) || [];
+            if (Array.isArray(activeTimeline) && activeTimeline.length > 0) {
+              return activeTimeline.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-mono font-bold text-slate-700">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <span className="text-slate-800 text-xs font-semibold">{item.action || item.name || 'Investigation Event'}</span>
+                      {item.note && <p className="text-[11px] text-slate-600 mt-0.5">{item.note}</p>}
+                      {item.actor && <span className="text-[10px] text-slate-400 font-mono">By {item.actor}</span>}
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500">{item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : (item.time || 'T0')}</span>
+                </div>
+              ));
+            }
+            return (
+            [
+              { step: '1', name: 'Email received and ingested into inspection sandbox', time: 'T0' },
+              { step: '2', name: 'RFC 822 MIME boundaries and headers parsed', time: 'T0 + 34ms' },
+              { step: '3', name: 'Network and file IOCs extracted and deduplicated', time: 'T0 + 41ms' },
+              { step: '4', name: 'AI threat model evaluation completed (TF-IDF + LR)', time: 'T0 + 82ms' },
+              { step: '5', name: 'DNS & email authentication verification completed', time: 'T0 + 130ms' },
+              { step: '6', name: 'Evidence fusion and multi-layer threat score synthesized', time: 'T0 + 168ms' },
+              { step: '7', name: 'Tamper-evident forensic report compiled and SHA-256 sealed', time: 'T0 + 206ms' }
+            ].map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-mono font-bold text-slate-700">
+                    {item.step}
+                  </span>
+                  <span className="text-slate-800 text-xs font-medium">{item.name}</span>
+                </div>
+                <span className="text-[10px] font-mono text-slate-500">{item.time}</span>
               </div>
-              <span className="text-[10px] font-mono text-slate-500">{item.time}</span>
-            </div>
-          ))}
+            ))
+          );
+        })()}
         </div>
       </div>
 

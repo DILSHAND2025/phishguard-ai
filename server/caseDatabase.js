@@ -559,16 +559,33 @@ export async function getCaseByCaseId(caseId) {
 /**
  * Updates case status (e.g. 'archived', 'active')
  */
-export async function updateCaseStatus(caseId, status) {
+/**
+ * Updates case status (e.g. 'archived', 'active', 'investigating', 'closed')
+ * and records an audit log entry.
+ */
+export async function updateCaseStatus(caseId, status, options = {}) {
   if (!caseId) return null;
   const cleanId = caseId.trim();
+  const actor = options.actor || 'Analyst (SOC Lead)';
+  const note = options.note || '';
 
   // Test Store
   if (testStore) {
     const item = testStore.find(c => c.caseId.toLowerCase() === cleanId.toLowerCase());
     if (item) {
+      const prevStatus = item.status;
       item.status = status;
       item.updatedAt = new Date().toISOString();
+      if (!item.timeline) item.timeline = [];
+      item.timeline.push({
+        step: `Status changed to ${status.toUpperCase()}`,
+        timestamp: item.updatedAt,
+        type: 'AUDIT',
+        actor,
+        previousStatus: prevStatus,
+        newStatus: status,
+        note: note || undefined
+      });
       return item;
     }
     return null;
@@ -582,14 +599,106 @@ export async function updateCaseStatus(caseId, status) {
   await ensureSchemaExists(prisma);
 
   try {
+    const current = await prisma.emailCase.findUnique({ where: { caseId: cleanId } });
+    if (!current) return null;
+
+    const timeline = Array.isArray(current.timeline) ? [...current.timeline] : [];
+    timeline.push({
+      step: `Status changed to ${status.toUpperCase()}`,
+      timestamp: new Date().toISOString(),
+      type: 'AUDIT',
+      actor,
+      previousStatus: current.status,
+      newStatus: status,
+      note: note || undefined
+    });
+
     return await prisma.emailCase.update({
       where: { caseId: cleanId },
-      data: { status }
+      data: { 
+        status,
+        timeline
+      }
     });
   } catch (err) {
     const safeError = sanitizeDbError(err);
     console.error(`[MAVERICK DB] Failed to update case ${cleanId}:`, safeError);
     throw new DatabaseUnavailableError(`Database update failed: ${safeError}`);
+  }
+}
+
+/**
+ * Adds an investigator note to a case and records audit history
+ */
+export async function addCaseNote(caseId, noteText, author = 'Analyst (SOC Lead)') {
+  if (!caseId || !noteText) return null;
+  const cleanId = caseId.trim();
+  const now = new Date().toISOString();
+  const noteEntry = {
+    id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: now,
+    author,
+    text: String(noteText).trim()
+  };
+
+  if (testStore) {
+    const item = testStore.find(c => c.caseId.toLowerCase() === cleanId.toLowerCase());
+    if (item) {
+      if (!item.timeline) item.timeline = [];
+      item.timeline.push({
+        step: `Analyst Note Added: ${noteEntry.text.slice(0, 60)}`,
+        timestamp: now,
+        type: 'NOTE',
+        actor: author,
+        note: noteEntry.text
+      });
+      if (!item.forensicMetadata) item.forensicMetadata = {};
+      if (!Array.isArray(item.forensicMetadata.notes)) item.forensicMetadata.notes = [];
+      item.forensicMetadata.notes.push(noteEntry);
+      item.updatedAt = now;
+      return item;
+    }
+    return null;
+  }
+
+  const prisma = getPrismaClient();
+  if (!prisma) {
+    throw new DatabaseUnavailableError();
+  }
+
+  await ensureSchemaExists(prisma);
+
+  try {
+    const current = await prisma.emailCase.findUnique({ where: { caseId: cleanId } });
+    if (!current) return null;
+
+    const timeline = Array.isArray(current.timeline) ? [...current.timeline] : [];
+    timeline.push({
+      step: `Analyst Note Added: ${noteEntry.text.slice(0, 60)}`,
+      timestamp: now,
+      type: 'NOTE',
+      actor: author,
+      note: noteEntry.text
+    });
+
+    const meta = (current.forensicMetadata && typeof current.forensicMetadata === 'object')
+      ? { ...current.forensicMetadata }
+      : {};
+    const notes = Array.isArray(meta.notes) ? [...meta.notes] : [];
+    notes.push(noteEntry);
+    meta.notes = notes;
+
+    return await prisma.emailCase.update({
+      where: { caseId: cleanId },
+      data: {
+        timeline,
+        forensicMetadata: meta
+      }
+    });
+  } catch (err) {
+    const safeError = sanitizeDbError(err);
+    console.error(`[MAVERICK DB] Failed to add note to case ${cleanId}:`, safeError);
+    throw new DatabaseUnavailableError(`Database note update failed: ${safeError}`);
   }
 }
 
@@ -604,6 +713,11 @@ export async function getCaseStats() {
     const high = active.filter(c => (c.priority || '').toLowerCase() === 'high').length;
     const medium = active.filter(c => (c.priority || '').toLowerCase() === 'medium').length;
     const low = active.filter(c => (c.priority || '').toLowerCase() === 'low').length;
+    const phishingDetections = active.filter(c => /phish/i.test(c.classification || '')).length;
+    const suspiciousDetections = active.filter(c => /suspicious/i.test(c.classification || '')).length;
+    const legitimateDetections = active.filter(c => /legitimate|clean/i.test(c.classification || '')).length;
+    const openCases = testStore.filter(c => (c.status || 'active').toLowerCase() === 'active' || (c.status || '').toLowerCase() === 'investigating').length;
+    const closedCases = testStore.filter(c => (c.status || '').toLowerCase() === 'closed').length;
 
     const topThreats = [...active]
       .sort((a, b) => (b.threatScore || 0) - (a.threatScore || 0))
@@ -613,8 +727,31 @@ export async function getCaseStats() {
         subject: c.subject,
         threatScore: c.threatScore,
         priority: c.priority,
-        classification: c.classification
+        classification: c.classification,
+        sender: c.sender,
+        analyzedAt: c.analyzedAt || c.createdAt
       }));
+
+    const recentActivity = [...active]
+      .sort((a, b) => new Date(b.analyzedAt || b.createdAt || 0) - new Date(a.analyzedAt || a.createdAt || 0))
+      .slice(0, 5)
+      .map(c => ({
+        caseId: c.caseId,
+        subject: c.subject,
+        threatScore: c.threatScore,
+        priority: c.priority,
+        classification: c.classification,
+        status: c.status || 'active',
+        sender: c.sender,
+        analyzedAt: c.analyzedAt || c.createdAt
+      }));
+
+    const severityDistribution = [
+      { name: 'Critical', count: critical, color: '#ef4444' },
+      { name: 'High', count: high, color: '#f97316' },
+      { name: 'Medium', count: medium, color: '#f59e0b' },
+      { name: 'Low', count: low, color: '#10b981' }
+    ];
 
     return {
       totalCases: active.length,
@@ -622,6 +759,13 @@ export async function getCaseStats() {
       high,
       medium,
       low,
+      phishingDetections,
+      suspiciousDetections,
+      legitimateDetections,
+      openCases,
+      closedCases,
+      severityDistribution,
+      recentActivity,
       topThreats
     };
   }
@@ -636,12 +780,30 @@ export async function getCaseStats() {
   try {
     const activeWhere = { status: { not: 'archived' } };
 
-    const [totalCases, critical, high, medium, low, topCases] = await Promise.all([
+    const [
+      totalCases, 
+      critical, 
+      high, 
+      medium, 
+      low, 
+      phishingCount,
+      suspiciousCount,
+      legitimateCount,
+      activeCases,
+      closedCases,
+      topCases,
+      recentCases
+    ] = await Promise.all([
       prisma.emailCase.count({ where: activeWhere }),
       prisma.emailCase.count({ where: { ...activeWhere, priority: { equals: 'Critical', mode: 'insensitive' } } }),
       prisma.emailCase.count({ where: { ...activeWhere, priority: { equals: 'High', mode: 'insensitive' } } }),
       prisma.emailCase.count({ where: { ...activeWhere, priority: { equals: 'Medium', mode: 'insensitive' } } }),
       prisma.emailCase.count({ where: { ...activeWhere, priority: { equals: 'Low', mode: 'insensitive' } } }),
+      prisma.emailCase.count({ where: { ...activeWhere, classification: { contains: 'Phishing', mode: 'insensitive' } } }),
+      prisma.emailCase.count({ where: { ...activeWhere, classification: { contains: 'Suspicious', mode: 'insensitive' } } }),
+      prisma.emailCase.count({ where: { ...activeWhere, classification: { contains: 'Legitimate', mode: 'insensitive' } } }),
+      prisma.emailCase.count({ where: { status: 'active' } }),
+      prisma.emailCase.count({ where: { status: 'closed' } }),
       prisma.emailCase.findMany({
         where: activeWhere,
         orderBy: [
@@ -654,10 +816,38 @@ export async function getCaseStats() {
           subject: true,
           threatScore: true,
           priority: true,
-          classification: true
+          classification: true,
+          sender: true,
+          analyzedAt: true
+        }
+      }),
+      prisma.emailCase.findMany({
+        where: activeWhere,
+        orderBy: [
+          { analyzedAt: 'desc' },
+          { createdAt: 'desc' }
+        ],
+        take: 5,
+        select: {
+          caseId: true,
+          subject: true,
+          threatScore: true,
+          priority: true,
+          classification: true,
+          sender: true,
+          status: true,
+          analyzedAt: true,
+          createdAt: true
         }
       })
     ]);
+
+    const severityDistribution = [
+      { name: 'Critical', count: critical, color: '#ef4444' },
+      { name: 'High', count: high, color: '#f97316' },
+      { name: 'Medium', count: medium, color: '#f59e0b' },
+      { name: 'Low', count: low, color: '#10b981' }
+    ];
 
     return {
       totalCases,
@@ -665,6 +855,13 @@ export async function getCaseStats() {
       high,
       medium,
       low,
+      phishingDetections: phishingCount,
+      suspiciousDetections: suspiciousCount,
+      legitimateDetections: legitimateCount,
+      openCases: activeCases,
+      closedCases,
+      severityDistribution,
+      recentActivity: recentCases,
       topThreats: topCases
     };
   } catch (err) {
@@ -673,3 +870,4 @@ export async function getCaseStats() {
     throw new DatabaseUnavailableError(`Database stats failed: ${safeError}`);
   }
 }
+

@@ -29,6 +29,7 @@ import {
   getCases, 
   getCaseByCaseId, 
   updateCaseStatus as dbUpdateCaseStatus, 
+  addCaseNote,
   getCaseStats, 
   isDatabaseAvailable, 
   DatabaseUnavailableError 
@@ -853,10 +854,18 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         try {
           const payload = JSON.parse(body || '{}');
-          if (!payload.status) {
+          if (!payload.status && !payload.note && !payload.noteText) {
             return sendJson(res, 400, { success: false, error: 'Missing status parameter in update request' });
           }
-          const updated = await dbUpdateCaseStatus(targetCaseId, payload.status);
+          let updated;
+          if (payload.status) {
+            updated = await dbUpdateCaseStatus(targetCaseId, payload.status, {
+              actor: payload.actor || payload.author,
+              note: payload.note || payload.noteText
+            });
+          } else {
+            updated = await addCaseNote(targetCaseId, payload.note || payload.noteText, payload.actor || payload.author);
+          }
           if (!updated) {
             return sendJson(res, 404, { success: false, error: `Case ${targetCaseId} not found` });
           }

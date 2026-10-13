@@ -267,7 +267,7 @@ export async function persistCaseInvestigation(analysisResult) {
  * @param {string} status
  * @returns {Promise<{ success: boolean, case?: Object, error?: string }>}
  */
-export async function archiveCase(caseId, status = 'archived') {
+export async function archiveCase(caseId, status = 'archived', options = {}) {
   if (!caseId) return { success: false, error: 'Missing caseId' };
   const baseUrl = getApiBaseUrl();
   const endpoint = `${baseUrl}/api/cases/${encodeURIComponent(caseId.trim())}`;
@@ -276,7 +276,11 @@ export async function archiveCase(caseId, status = 'archived') {
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ 
+        status,
+        actor: options.actor,
+        note: options.note
+      })
     });
 
     if (!res.ok) {
@@ -294,7 +298,7 @@ export async function archiveCase(caseId, status = 'archived') {
 /**
  * Fetches aggregated case statistics from real database data
  * 
- * @returns {Promise<{ totalCases: number, critical: number, high: number, medium: number, low: number, topThreats: Array, isDbUnavailable?: boolean }>}
+ * @returns {Promise<{ totalCases: number, critical: number, high: number, medium: number, low: number, topThreats: Array, isDbUnavailable?: boolean, phishingDetections?: number, openCases?: number, severityDistribution?: Array, recentActivity?: Array }>}
  */
 export async function fetchCaseStats() {
   const baseUrl = getApiBaseUrl();
@@ -319,6 +323,10 @@ export async function fetchCaseStats() {
       high: 0,
       medium: 0,
       low: 0,
+      phishingDetections: 0,
+      openCases: 0,
+      severityDistribution: [],
+      recentActivity: [],
       topThreats: [],
       isDbUnavailable: true
     };
@@ -330,6 +338,10 @@ export async function fetchCaseStats() {
       high: 0,
       medium: 0,
       low: 0,
+      phishingDetections: 0,
+      openCases: 0,
+      severityDistribution: [],
+      recentActivity: [],
       topThreats: [],
       isDbUnavailable: true
     };
@@ -378,13 +390,29 @@ export function createCaseFromAnalysis(analysisResult) {
   };
 }
 
-export function addCaseNote(caseId, noteText, author = 'Analyst (SOC Lead)') {
-  return [];
+export async function addCaseNote(caseId, noteText, author = 'Analyst (SOC Lead)') {
+  if (!caseId || !noteText) return { success: false, error: 'Missing caseId or noteText' };
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/api/cases/${encodeURIComponent(caseId.trim())}`;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: noteText, actor: author })
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      return { success: false, error: errBody.error || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { success: true, case: data.case };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
-export function updateCaseStatus(caseId, status) {
-  archiveCase(caseId, status);
-  return [];
+export async function updateCaseStatus(caseId, status, options = {}) {
+  return archiveCase(caseId, status, options);
 }
 
 export function toggleCaseContainment() {

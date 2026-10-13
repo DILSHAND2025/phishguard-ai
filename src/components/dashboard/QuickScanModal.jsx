@@ -113,12 +113,12 @@ export const QuickScanModal = ({ isOpen, onClose, onStartAnalysis }) => {
 
     setTimeout(() => {
       setScanProgress(45);
-      setScanLog(prev => [...prev, '[+] Parsing RFC 822 headers: SPF=FAIL, DKIM=FAIL, DMARC=FAIL']);
+      setScanLog(prev => [...prev, '[+] Parsing RFC 822 envelope & authenticating signatures...']);
     }, 300);
 
     setTimeout(() => {
       setScanProgress(75);
-      setScanLog(prev => [...prev, '[+] NLP Threat Model: Intent evaluated', '[+] Extracting IOCs & Multi-hop topology...']);
+      setScanLog(prev => [...prev, '[+] Evaluating AI threat intent & routing indicators...', '[+] Extracting IOCs & Multi-hop topology...']);
     }, 650);
 
     setTimeout(async () => {

@@ -28,6 +28,7 @@ import { createCaseFromAnalysis, persistCaseInvestigation, fetchCaseById } from 
 import { analyzeAttachment } from './services/attachmentForensics';
 import { analyzeEmailAuthentication } from './services/emailAuthService';
 import { defaultHashReputationService } from './services/hashReputationService';
+import { buildForensicReport } from './services/forensicReportService';
 import { getApiBaseUrl } from './services/apiConfig';
 
 import './App.css';
@@ -362,7 +363,7 @@ function App() {
       const campaigns = correlateThreatCampaigns([parsedEmail]);
       const primaryCampaign = campaigns[0] || null;
 
-      // 8. Case Creation & Persistent Database Storage (Requirement 6)
+      // 8. Case Creation & Forensic Report Compilation
       let caseItem = createCaseFromAnalysis({
         email: parsedEmail,
         fusion,
@@ -371,11 +372,13 @@ function App() {
         campaign: primaryCampaign
       });
 
-      let dbSaveError = null;
+      const emailHash = parsedEmail.sha256 || caseItem.sha256 || null;
+      caseItem.sha256 = emailHash;
+      caseItem.emailHash = emailHash;
+
+      let report = null;
       try {
-        const saveRes = await persistCaseInvestigation({
-          caseId: caseItem.caseId,
-          emailHash: caseItem.sha256,
+        report = await buildForensicReport({
           email: parsedEmail,
           fusion,
           aiThreat,
@@ -384,6 +387,30 @@ function App() {
           geoList,
           emailAuth,
           campaign: primaryCampaign,
+          caseId: caseItem.caseId
+        });
+        if (report?.timeline) caseItem.timeline = report.timeline;
+        if (report?.recommendations) caseItem.recommendations = report.recommendations;
+      } catch (repErr) {
+        console.warn('[MAVERICK] Forensic report compilation warning:', repErr);
+      }
+
+      // 9. Persistent Database Storage
+      let dbSaveError = null;
+      try {
+        const saveRes = await persistCaseInvestigation({
+          caseId: caseItem.caseId,
+          emailHash,
+          email: parsedEmail,
+          fusion,
+          aiThreat,
+          iocs,
+          geoInfo,
+          geoList,
+          emailAuth,
+          campaign: primaryCampaign,
+          timeline: report?.timeline || caseItem.timeline || [],
+          recommendations: report?.recommendations || caseItem.recommendations || [],
           originalFilename: parsedEmail.filename,
           rawContent: parsedEmail.rawSnippet || ''
         });
@@ -419,6 +446,8 @@ function App() {
         campaign: primaryCampaign,
         caseItem,
         caseId: caseItem.caseId,
+        emailHash,
+        report,
         isSaved: Boolean(caseItem.isSaved),
         dbSaveError
       };

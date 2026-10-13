@@ -20,12 +20,21 @@ import { fetchCaseStats } from '../services/caseStore';
 
 export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCase, currentAnalysis }) => {
   const [activeDeckTab, setActiveDeckTab] = useState('queue');
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [statsError, setStatsError] = useState(null);
   const [dbStats, setDbStats] = useState({
     totalCases: 0,
     critical: 0,
     high: 0,
     medium: 0,
     low: 0,
+    openCases: 0,
+    closedCases: 0,
+    phishingDetections: 0,
+    suspiciousDetections: 0,
+    legitimateDetections: 0,
+    severityDistribution: { critical: 0, high: 0, medium: 0, low: 0 },
+    recentActivity: [],
     topThreats: []
   });
 
@@ -33,14 +42,34 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
   useEffect(() => {
     let isMounted = true;
     async function loadStats() {
-      const stats = await fetchCaseStats();
-      if (isMounted && stats) {
-        setDbStats(stats);
+      setLoadingStats(true);
+      setStatsError(null);
+      try {
+        const stats = await fetchCaseStats();
+        if (isMounted && stats) {
+          setDbStats(stats);
+          if (stats.isDbUnavailable) {
+            setStatsError('PostgreSQL database is offline or unconfigured. Real-time local fallback active.');
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setStatsError('Unable to load database metrics: ' + err.message);
+        }
+      } finally {
+        if (isMounted) setLoadingStats(false);
       }
     }
     loadStats();
     return () => { isMounted = false; };
   }, [currentAnalysis]);
+
+  // Compute severity distribution percentages for the real distribution bar
+  const totalForBar = dbStats.totalCases || 0;
+  const critPct = totalForBar > 0 ? Math.round((dbStats.critical / totalForBar) * 100) : 0;
+  const highPct = totalForBar > 0 ? Math.round((dbStats.high / totalForBar) * 100) : 0;
+  const medPct = totalForBar > 0 ? Math.round((dbStats.medium / totalForBar) * 100) : 0;
+  const lowPct = totalForBar > 0 ? Math.max(0, 100 - critPct - highPct - medPct) : 0;
 
   return (
     <div className="space-y-6 pb-16 font-sans">
@@ -62,7 +91,7 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
                 )}
               </span>
               <span className={`text-xs font-mono ${dbStats.isDbUnavailable ? 'text-amber-600' : 'text-slate-400'}`}>
-                • {dbStats.isDbUnavailable ? 'Persistence Offline' : `${dbStats.totalCases} Persistent Cases`}
+                • {dbStats.isDbUnavailable ? 'Local Persistence' : `${dbStats.totalCases} Stored Cases`}
               </span>
             </div>
 
@@ -108,17 +137,28 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
             <span>Low: <strong className="text-emerald-600">{dbStats.low}</strong></span>
           </div>
           <div className="text-slate-400 text-[11px]">
-            Database Sync: Live PostgreSQL
+            Database Sync: {dbStats.isDbUnavailable ? 'Offline' : 'Live PostgreSQL'}
           </div>
         </div>
       </div>
 
-      {/* REAL DATABASE STATS KPI CARDS (Requirement 5 & 14) */}
+      {/* Database Error State Banner */}
+      {statsError && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800 flex items-start gap-3 shadow-2xs">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-semibold text-amber-900">Database Synchronization Notice</div>
+            <p className="text-amber-800 leading-relaxed">{statsError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* REAL DATABASE STATS KPI CARDS (Requirement 4) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5">
         <StatCard
-          title="TOTAL CASES"
-          value={String(dbStats.totalCases)}
-          subValue="Stored"
+          title="SCAN TOTALS"
+          value={loadingStats ? '...' : String(dbStats.totalCases)}
+          subValue="Scanned & Stored"
           change="Real DB Data"
           trend="up"
           icon={Database}
@@ -126,29 +166,29 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
           highlightTag="PostgreSQL"
         />
         <StatCard
-          title="CRITICAL"
-          value={String(dbStats.critical)}
-          subValue="80-100"
-          change="Immediate Action"
+          title="PHISHING DETECTIONS"
+          value={loadingStats ? '...' : String(dbStats.phishingDetections ?? (dbStats.critical + dbStats.high))}
+          subValue="Malicious / BEC"
+          change="Real Verdicts"
           trend="up"
           icon={ShieldAlert}
           accentColor="red"
-          highlightTag="P1"
+          highlightTag="P1/P2"
         />
         <StatCard
-          title="HIGH"
-          value={String(dbStats.high)}
-          subValue="60-79"
-          change="Elevated Risk"
+          title="OPEN CASES"
+          value={loadingStats ? '...' : String(dbStats.openCases ?? dbStats.totalCases)}
+          subValue="Active Incidents"
+          change="In Triage"
           trend="up"
           icon={MailWarning}
           accentColor="orange"
-          highlightTag="P2"
+          highlightTag="Queue"
         />
         <StatCard
-          title="MEDIUM"
-          value={String(dbStats.medium)}
-          subValue="30-59"
+          title="MEDIUM ANOMALIES"
+          value={loadingStats ? '...' : String(dbStats.medium)}
+          subValue="Score 30-59"
           change="Suspicious"
           trend="neutral"
           icon={AlertTriangle}
@@ -156,10 +196,10 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
           highlightTag="P3"
         />
         <StatCard
-          title="LOW"
-          value={String(dbStats.low)}
-          subValue="0-29"
-          change="Benign"
+          title="BENIGN EMAILS"
+          value={loadingStats ? '...' : String(dbStats.legitimateDetections ?? dbStats.low)}
+          subValue="Clean Communication"
+          change="Legitimate"
           trend="down"
           icon={ShieldCheck}
           accentColor="emerald"
@@ -167,12 +207,60 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
         />
       </div>
 
-      {/* Visual Analytics & TOP THREATS Widget (Requirement 6 & 15) */}
+      {/* SEVERITY DISTRIBUTION BAR (Requirement 4) */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold uppercase tracking-wider font-mono text-slate-700">
+            Database Threat Severity Distribution
+          </span>
+          <span className="font-mono text-slate-500">
+            {totalForBar} Total Cases Evaluated
+          </span>
+        </div>
+
+        {totalForBar > 0 ? (
+          <div className="space-y-2">
+            <div className="w-full h-3 rounded-full bg-slate-100 flex overflow-hidden">
+              {critPct > 0 && (
+                <div style={{ width: `${critPct}%` }} className="bg-red-500 transition-all" title={`Critical: ${dbStats.critical} (${critPct}%)`} />
+              )}
+              {highPct > 0 && (
+                <div style={{ width: `${highPct}%` }} className="bg-orange-500 transition-all" title={`High: ${dbStats.high} (${highPct}%)`} />
+              )}
+              {medPct > 0 && (
+                <div style={{ width: `${medPct}%` }} className="bg-amber-400 transition-all" title={`Medium: ${dbStats.medium} (${medPct}%)`} />
+              )}
+              {lowPct > 0 && (
+                <div style={{ width: `${lowPct}%` }} className="bg-emerald-500 transition-all" title={`Low: ${dbStats.low} (${lowPct}%)`} />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 flex-wrap gap-2 pt-0.5">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500"></span>Critical: {dbStats.critical} ({critPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-orange-500"></span>High: {dbStats.high} ({highPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400"></span>Medium: {dbStats.medium} ({medPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Low / Clean: {dbStats.low} ({lowPct}%)</span>
+            </div>
+          </div>
+        ) : (
+          /* Empty State when no cases stored */
+          <div className="p-3 rounded-lg bg-slate-50 text-xs text-slate-500 text-center flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-slate-400" />
+            <span>No cases stored in database yet. Ingest an email or run a threat scan to view real severity distribution.</span>
+          </div>
+        )}
+      </div>
+
+      {/* Visual Analytics & TOP THREATS Widget (Requirement 4 & 6) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
         {/* Left 2 Cols: Threat Velocity Chart */}
         <div className="lg:col-span-2">
-          <ThreatVelocityChart />
+          <ThreatVelocityChart 
+            loading={loadingStats}
+            error={statsError}
+            dbStats={dbStats}
+          />
         </div>
 
         {/* Right Col: TOP THREATS (Requirement 6) */}
@@ -307,6 +395,17 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
             >
               MITRE ATT&CK Matrix
             </button>
+
+            <button
+              onClick={() => setActiveDeckTab('recent')}
+              className={`py-3 px-3.5 font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeDeckTab === 'recent'
+                  ? 'border-cyan-600 text-cyan-800 font-semibold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Recent Activity ({Array.isArray(dbStats.recentActivity) ? dbStats.recentActivity.length : 0})
+            </button>
           </div>
         </div>
 
@@ -328,6 +427,79 @@ export const Dashboard = ({ onViewChange, onOpenScan, onInspectEmail, onSelectCa
 
           {activeDeckTab === 'mitre' && (
             <MitreMatrixSummary />
+          )}
+
+          {activeDeckTab === 'recent' && (
+            <div className="space-y-3 font-sans">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 font-mono">
+                    Recent Database Ingestions & Analysis Activity
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Audit trail of newly analyzed messages stored in PostgreSQL
+                  </p>
+                </div>
+              </div>
+
+              {Array.isArray(dbStats.recentActivity) && dbStats.recentActivity.length > 0 ? (
+                <div className="divide-y divide-slate-100">
+                  {dbStats.recentActivity.map((item, idx) => {
+                    const sc = item.threatScore ?? 0;
+                    const isCrit = sc >= 80;
+                    const isHigh = sc >= 60;
+                    const isMed = sc >= 30;
+
+                    return (
+                      <div
+                        key={item.caseId || idx}
+                        onClick={() => {
+                          if (onSelectCase) onSelectCase(item);
+                          onViewChange('investigation-case');
+                        }}
+                        className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 p-2 rounded-xl transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${
+                            isCrit ? 'bg-red-500' : isHigh ? 'bg-orange-500' : isMed ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`} />
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-slate-900 group-hover:text-cyan-700 transition-colors truncate">
+                              {item.subject || '(No Subject)'}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2 mt-0.5">
+                              <span>{item.caseId}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-xs">{item.sender}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto font-mono text-xs">
+                          <span className={`px-2 py-0.5 rounded font-bold border ${
+                            isCrit ? 'bg-red-50 text-red-700 border-red-200' :
+                            isHigh ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            isMed ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                            'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            Score {sc}
+                          </span>
+                          <span className="text-slate-400 text-[11px]">
+                            {item.analyzedAt ? new Date(item.analyzedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-cyan-600 transition-colors" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-xs text-slate-400 space-y-2">
+                  <CheckCircle2 className="w-6 h-6 text-slate-300 mx-auto" />
+                  <p>No recent activity recorded yet in the database.</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
