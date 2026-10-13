@@ -124,17 +124,15 @@ const handleGoogleSignInClick = () => {
         {/* Action Area */}
         <div className="space-y-4">
           
-          {/* Official GIS Button (if rendered) */}
-          <div ref={googleButtonRef} className="flex justify-center empty:hidden"></div>
+          
+{/* Google Identity Services button */}
+<div
+  ref={googleButtonRef}
+  className="flex w-full justify-center"
+  style={{ minHeight: 46 }}
+/>
 
-          {/* Primary "Sign in with Google" Button */}
-          <button
-            type="button"
-            id="btn-google-login"
-            onClick={handleGoogleSignInClick}
-            disabled={isLoading}
-            className="w-full h-[46px] rounded-lg bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold flex items-center justify-center gap-3 transition-colors cursor-pointer disabled:opacity-70 shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-400"
-          >
+
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
