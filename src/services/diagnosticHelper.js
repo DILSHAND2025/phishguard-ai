@@ -11,6 +11,8 @@
  * NEVER fabricates results, status, or intelligence matches.
  */
 
+import { classifyIP, IP_CLASSIFICATION } from './emailParser.js';
+
 export function getExplainableDiagnosticChecks(currentAnalysis) {
   if (!currentAnalysis) {
     return {
@@ -321,11 +323,27 @@ export function getExplainableDiagnosticChecks(currentAnalysis) {
         });
       }
     } else if (geoInfo.isPrivate || geoInfo.status === 'PRIVATE_IP') {
+      const classification = geoInfo.classification || (geoInfo.ip ? classifyIP(geoInfo.ip) : '');
+      const isTestNet = classification === IP_CLASSIFICATION.TEST_NET_IP || classification?.includes('TEST-NET') || geoInfo.role === 'RESERVED / TEST-NET';
+      const isLoopback = classification === IP_CLASSIFICATION.LOOPBACK_IP || classification?.includes('Loopback') || geoInfo.role === 'LOOPBACK';
+      const isLinkLocal = classification === IP_CLASSIFICATION.LINK_LOCAL_IP || classification?.includes('Link-local') || geoInfo.role === 'LINK_LOCAL';
+      const isReserved = classification === IP_CLASSIFICATION.RESERVED_IP || classification?.includes('Reserved') || geoInfo.role === 'RESERVED';
+
+      const reason = isTestNet
+        ? `IP ${geoInfo.ip} belongs to RFC 5737 / RFC 3849 documentation test ranges; external geolocation is not applicable.`
+        : isLoopback
+          ? `IP ${geoInfo.ip} is a host-local loopback address (RFC 1122); external geolocation is not applicable.`
+          : isLinkLocal
+            ? `IP ${geoInfo.ip} is an autoconfigured link-local address (RFC 3927); external geolocation is not applicable.`
+            : isReserved
+              ? `IP ${geoInfo.ip} belongs to reserved special-purpose address space; external geolocation is not applicable.`
+              : `IP ${geoInfo.ip} is a private RFC 1918 internal address; external geolocation is not applicable.`;
+
       skippedChecks.push({
-        id: 'chk-net-private',
+        id: isTestNet ? 'chk-net-testnet' : isLoopback ? 'chk-net-loopback' : isLinkLocal ? 'chk-net-linklocal' : isReserved ? 'chk-net-reserved' : 'chk-net-private',
         title: 'External Geolocation Resolution',
         layer: 'Network Topology',
-        reason: `IP ${geoInfo.ip} is a private RFC 1918 internal address; external geolocation is not applicable.`,
+        reason,
         status: 'NOT_PERFORMED'
       });
     } else {

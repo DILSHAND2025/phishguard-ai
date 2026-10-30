@@ -49,6 +49,8 @@ import {
   GEO_LEGAL_DISCLAIMER 
 } from '../src/services/geoLocationService.js';
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from '../src/services/evidenceFusion.js';
+import { getExplainableDiagnosticChecks } from '../src/services/diagnosticHelper.js';
+import { normalizeCaseGeoIntelligence } from '../src/services/caseStore.js';
 
 test('MAVERICK Forensic IP GeoLocation Test Suite', async (t) => {
 
@@ -577,10 +579,31 @@ Test message containing documentation test IP.`;
     const resolvedTestNet = await defaultGeoService.resolveIP(ind.ip, ind);
     assert.equal(resolvedTestNet.role, 'RESERVED / TEST-NET');
     assert.equal(resolvedTestNet.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(resolvedTestNet.networkType, 'Documentation / TEST-NET Subnet (RFC 5737)');
     assert.equal(resolvedTestNet.latitude, null);
     assert.equal(resolvedTestNet.longitude, null);
     assert.ok(resolvedTestNet.observedEvidence.includes('documentation/example'));
     assert.ok(resolvedTestNet.inferredContext.includes('documentation address'));
+
+    // Verify diagnostic ledger accurately attributes to documentation ranges, NOT private RFC 1918
+    const diag = getExplainableDiagnosticChecks({ geoInfo: resolvedTestNet });
+    const testNetCheck = diag.skippedChecks.find(c => c.id === 'chk-net-testnet');
+    assert.ok(testNetCheck, 'chk-net-testnet check must exist');
+    assert.ok(testNetCheck.reason.includes('RFC 5737 / RFC 3849 documentation test ranges'));
+    assert.ok(!testNetCheck.reason.includes('RFC 1918'), 'Must NOT attribute to RFC 1918');
+
+    // Verify normalization for legacy / cached case records
+    const legacyCase = {
+      caseId: 'CAS-2026-LEGACY',
+      geoIntelligence: {
+        geoInfo: { ip: '198.51.100.24', role: 'PRIVATE', classification: 'Private IP' },
+        geoList: [{ ip: '198.51.100.24', role: 'PRIVATE' }]
+      }
+    };
+    const sanitizedCase = normalizeCaseGeoIntelligence(legacyCase);
+    assert.equal(sanitizedCase.geoIntelligence.geoInfo.role, 'RESERVED / TEST-NET');
+    assert.equal(sanitizedCase.geoIntelligence.geoInfo.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(sanitizedCase.geoIntelligence.geoList[0].role, 'RESERVED / TEST-NET');
   });
 
   // Case 18: Genuine public IP (8.8.8.8) live geolocation resolution

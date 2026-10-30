@@ -627,8 +627,26 @@ export async function parseEmailContent(rawInput, fileMetadata = null) {
       const hop = parsedHops[i];
       if (hop.extractedIP) {
         originatingIP = hop.extractedIP;
-        originatingIPSource = `Received (Hop #${hop.hopNumber} - Internal/Private Relay)`;
-        originatingIPExplanation = `Originating hop extracted internal IP (${originatingIP}); sender's public egress IP was not observable in Received headers.`;
+        const hopClass = classifyIP(originatingIP);
+        const hopRole = hopClass === IP_CLASSIFICATION.TEST_NET_IP 
+          ? 'Documentation / TEST-NET'
+          : hopClass === IP_CLASSIFICATION.LOOPBACK_IP
+            ? 'Loopback'
+            : hopClass === IP_CLASSIFICATION.LINK_LOCAL_IP
+              ? 'Link-Local'
+              : hopClass === IP_CLASSIFICATION.RESERVED_IP
+                ? 'Reserved Range'
+                : 'Internal/Private Relay';
+        originatingIPSource = `Received (Hop #${hop.hopNumber} - ${hopRole})`;
+        originatingIPExplanation = hopClass === IP_CLASSIFICATION.TEST_NET_IP
+          ? `Originating hop extracted documentation / TEST-NET IP (${originatingIP}); excluded from public network routing.`
+          : hopClass === IP_CLASSIFICATION.LOOPBACK_IP
+            ? `Originating hop extracted host-local loopback IP (${originatingIP}); internal to sender host.`
+            : hopClass === IP_CLASSIFICATION.LINK_LOCAL_IP
+              ? `Originating hop extracted link-local IP (${originatingIP}); autoconfigured non-routable hop.`
+              : hopClass === IP_CLASSIFICATION.RESERVED_IP
+                ? `Originating hop extracted special-purpose reserved IP (${originatingIP}); unroutable address space.`
+                : `Originating hop extracted internal IP (${originatingIP}); sender's public egress IP was not observable in Received headers.`;
         break;
       }
     }

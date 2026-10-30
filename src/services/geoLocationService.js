@@ -389,8 +389,9 @@ export class GeoLocationService {
       let city = 'Local Area Network';
       let isp = 'Private Infrastructure';
       let asn = 'N/A (Private/Local Subnet)';
-      let computedRole = context.role || 'PRIVATE';
-      let computedRoleLabel = context.roleLabel || 'Private Intranet (RFC 1918)';
+      let networkType = 'Private Intranet (RFC 1918)';
+      let computedRole = 'PRIVATE';
+      let computedRoleLabel = 'Private Intranet (RFC 1918)';
       let observedEvidence = `IP ${cleanIP} belongs to private ip intranet address space (RFC 1918 / RFC 4193).`;
       let inferredContext = 'Internal non-routable corporate hop; excluded from public geolocation lookups.';
 
@@ -401,8 +402,9 @@ export class GeoLocationService {
         city = 'Reserved Test-Net Subnet';
         isp = 'IANA Special-Purpose (Documentation)';
         asn = 'N/A (Documentation Subnet)';
-        computedRole = context.role || 'RESERVED / TEST-NET';
-        computedRoleLabel = context.roleLabel || 'Documentation / TEST-NET (RFC 5737)';
+        networkType = 'Documentation / TEST-NET Subnet (RFC 5737)';
+        computedRole = 'RESERVED / TEST-NET';
+        computedRoleLabel = 'Documentation / TEST-NET (RFC 5737)';
         observedEvidence = `IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
         inferredContext = 'Non-routable documentation address used in test scenarios or documentation; excluded from public geolocation.';
       } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
@@ -412,8 +414,9 @@ export class GeoLocationService {
         city = 'Localhost (Loopback)';
         isp = 'Host Software Loopback';
         asn = 'N/A (Loopback Interface)';
-        computedRole = context.role || 'LOOPBACK';
-        computedRoleLabel = context.roleLabel || 'Loopback Address';
+        networkType = 'Host-Local Loopback (RFC 1122)';
+        computedRole = 'LOOPBACK';
+        computedRoleLabel = 'Loopback Address';
         observedEvidence = `IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
         inferredContext = 'Host-internal loopback address; excluded from public network geolocation.';
       } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
@@ -423,8 +426,9 @@ export class GeoLocationService {
         city = 'Link-Local Subnet';
         isp = 'Link-Local Infrastructure';
         asn = 'N/A (Link-Local)';
-        computedRole = context.role || 'LINK_LOCAL';
-        computedRoleLabel = context.roleLabel || 'Link-Local Address (RFC 3927)';
+        networkType = 'Link-Local Subnet (RFC 3927)';
+        computedRole = 'LINK_LOCAL';
+        computedRoleLabel = 'Link-Local Address (RFC 3927)';
         observedEvidence = `IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
         inferredContext = 'Non-routable link-local segment hop; excluded from public geolocation.';
       } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
@@ -434,8 +438,9 @@ export class GeoLocationService {
         city = 'Reserved Range';
         isp = 'IANA Special-Purpose';
         asn = 'N/A (Special-Purpose)';
-        computedRole = context.role || 'RESERVED';
-        computedRoleLabel = context.roleLabel || 'Reserved / Special-Purpose';
+        networkType = 'Reserved / Special-Purpose Subnet';
+        computedRole = 'RESERVED';
+        computedRoleLabel = 'Reserved / Special-Purpose';
         observedEvidence = `IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
         inferredContext = 'Non-routable reserved network entity; excluded from public geolocation.';
       }
@@ -460,6 +465,7 @@ export class GeoLocationService {
         isp,
         asn,
         asnOrg: isp,
+        networkType,
         timezone: '',
         provider: 'Internal Filter',
         isDemo: false,

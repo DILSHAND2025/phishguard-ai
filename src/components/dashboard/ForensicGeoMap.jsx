@@ -12,6 +12,7 @@ import {
   Crosshair
 } from 'lucide-react';
 import { GEO_LEGAL_DISCLAIMER } from '../../services/geoLocationService.js';
+import { classifyIP, IP_CLASSIFICATION } from '../../services/emailParser.js';
 
 // Custom SVG Pin Maker for Leaflet
 function createSvgIcon(role = 'SOURCE', isDemo = false) {
@@ -360,6 +361,41 @@ export const ForensicGeoMap = ({
                   const isSelected = rec.ip === selectedIP;
                   const hasCoords = typeof rec.latitude === 'number' && typeof rec.longitude === 'number';
 
+                  const effectiveClassification = rec.classification || (rec.ip ? classifyIP(rec.ip) : '');
+                  const isTestNet = rec.role === 'RESERVED / TEST-NET' || effectiveClassification === IP_CLASSIFICATION.TEST_NET_IP || effectiveClassification?.includes('TEST-NET');
+                  const isLoopback = rec.role === 'LOOPBACK' || effectiveClassification === IP_CLASSIFICATION.LOOPBACK_IP || effectiveClassification?.includes('Loopback');
+                  const isLinkLocal = rec.role === 'LINK_LOCAL' || effectiveClassification === IP_CLASSIFICATION.LINK_LOCAL_IP || effectiveClassification?.includes('Link-local');
+                  const isReserved = rec.role === 'RESERVED' || effectiveClassification === IP_CLASSIFICATION.RESERVED_IP || effectiveClassification?.includes('Reserved');
+                  const isPrivate = rec.role === 'PRIVATE' || effectiveClassification === IP_CLASSIFICATION.PRIVATE_IP || effectiveClassification?.includes('Private');
+
+                  const badgeText = isTestNet
+                    ? 'RESERVED / TEST-NET'
+                    : isLoopback
+                      ? 'LOOPBACK'
+                      : isLinkLocal
+                        ? 'LINK_LOCAL'
+                        : isReserved
+                          ? 'RESERVED'
+                          : isPrivate
+                            ? 'PRIVATE'
+                            : (rec.role || 'IP');
+
+                  const badgeColor = isTestNet
+                    ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                    : isLoopback
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : isLinkLocal
+                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        : isReserved
+                          ? 'bg-yellow-50 text-yellow-800 border border-yellow-300'
+                          : isPrivate
+                            ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                            : rec.role === 'SOURCE'
+                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              : rec.role === 'URL_HOST'
+                                ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                                : 'bg-sky-50 text-sky-700 border border-sky-200';
+
                   return (
                     <div
                       key={idx}
@@ -381,24 +417,8 @@ export const ForensicGeoMap = ({
                             </span>
                           )}
                         </div>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
-                          rec.role === 'SOURCE' 
-                            ? 'bg-red-50 text-red-700 border border-red-200'
-                            : rec.role === 'URL_HOST'
-                              ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                              : rec.role === 'RESERVED / TEST-NET' || rec.classification?.includes('TEST-NET')
-                                ? 'bg-amber-50 text-amber-800 border border-amber-300'
-                                : rec.role === 'LOOPBACK' || rec.classification?.includes('Loopback')
-                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                  : rec.role === 'LINK_LOCAL' || rec.classification?.includes('Link-local')
-                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                    : rec.role === 'RESERVED' || rec.classification?.includes('Reserved')
-                                      ? 'bg-yellow-50 text-yellow-800 border border-yellow-300'
-                                      : rec.role === 'PRIVATE' || rec.classification?.includes('Private')
-                                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                        : 'bg-sky-50 text-sky-700 border border-sky-200'
-                        }`}>
-                          {rec.role || 'IP'}
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${badgeColor}`}>
+                          {badgeText}
                         </span>
                       </div>
 

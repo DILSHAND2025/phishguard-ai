@@ -66,6 +66,7 @@ export default async function handler(req, res) {
       let city = 'Local Area Network';
       let isp = 'Private Infrastructure';
       let asn = 'N/A (Private)';
+      let networkType = 'Private Intranet (RFC 1918)';
       let role = 'PRIVATE';
       let roleLabel = 'Private Intranet (RFC 1918)';
       let observedEvidence = `Observed IP ${cleanIP} belongs to private ip intranet address space (RFC 1918).`;
@@ -78,6 +79,7 @@ export default async function handler(req, res) {
         city = 'Reserved Test-Net Subnet';
         isp = 'IANA Special-Purpose (Documentation)';
         asn = 'N/A (Documentation Subnet)';
+        networkType = 'Documentation / TEST-NET Subnet (RFC 5737)';
         role = 'RESERVED / TEST-NET';
         roleLabel = 'Documentation / TEST-NET (RFC 5737)';
         observedEvidence = `Observed IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
@@ -89,6 +91,7 @@ export default async function handler(req, res) {
         city = 'Localhost (Loopback)';
         isp = 'Host Software Loopback';
         asn = 'N/A (Loopback)';
+        networkType = 'Host-Local Loopback (RFC 1122)';
         role = 'LOOPBACK';
         roleLabel = 'Loopback Address';
         observedEvidence = `Observed IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
@@ -100,6 +103,7 @@ export default async function handler(req, res) {
         city = 'Link-Local Subnet';
         isp = 'Link-Local Infrastructure';
         asn = 'N/A (Link-Local)';
+        networkType = 'Link-Local Subnet (RFC 3927)';
         role = 'LINK_LOCAL';
         roleLabel = 'Link-Local Address (RFC 3927)';
         observedEvidence = `Observed IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
@@ -111,6 +115,7 @@ export default async function handler(req, res) {
         city = 'Reserved Range';
         isp = 'IANA Special-Purpose';
         asn = 'N/A (Special-Purpose)';
+        networkType = 'Reserved / Special-Purpose Subnet';
         role = 'RESERVED';
         roleLabel = 'Reserved / Special-Purpose';
         observedEvidence = `Observed IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
@@ -136,6 +141,7 @@ export default async function handler(req, res) {
         isp,
         asn,
         asnOrg: isp,
+        networkType,
         provider: 'Internal Filter',
         dataSource: 'INTERNAL_FILTER',
         observedEvidence,

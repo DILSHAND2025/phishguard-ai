@@ -602,7 +602,7 @@ export function generateForensicPdf(report) {
 
     let gY = curY + 36;
     if (!node) {
-      page.drawText('Private, internal RFC 1918, or direct localhost IP origin. No public ASN telemetry.', MARGIN + 14, gY, { font: 'F1', size: 8.5, color: COLORS.textMuted });
+      page.drawText('Non-routable, documentation range, or private IP origin. No public ASN telemetry.', MARGIN + 14, gY, { font: 'F1', size: 8.5, color: COLORS.textMuted });
     } else {
       const drawGeoRow = (l1, v1, l2, v2) => {
         page.drawText(l1, MARGIN + 14, gY, { font: 'F2', size: 8, color: COLORS.textMuted });
