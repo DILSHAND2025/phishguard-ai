@@ -134,7 +134,17 @@ export function initGoogleIdentityServices({ onCredentialResponse, onError }) {
         }
       },
       auto_select: false,
-      cancel_on_tap_outside: true
+      cancel_on_tap_outside: true,
+      error_callback: (err) => {
+        console.warn('[MAVERICK Auth] Google Identity Services error callback:', err);
+        if (err?.type === 'origin_mismatch') {
+          onError?.('Google OAuth 400: Origin mismatch. Authorized JavaScript origin required in Google Cloud Console.');
+        } else if (err?.type === 'popup_closed') {
+          onError?.('Google Sign-In popup was closed before completing authentication.');
+        } else if (err?.message) {
+          onError?.(err.message);
+        }
+      }
     });
 
     return true;

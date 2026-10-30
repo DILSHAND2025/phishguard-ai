@@ -7,7 +7,8 @@
 import { OAuth2Client } from 'google-auth-library';
 import { parseJsonBody, sendResponse } from '../_utils.js';
 
-const oauth2Client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
+const oauth2Client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export default async (req, res) => {
   // Allow only POST requests (Vercel may send OPTIONS for CORS preflight)
@@ -28,7 +29,7 @@ export default async (req, res) => {
 
     const ticket = await oauth2Client.verifyIdToken({
       idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: GOOGLE_CLIENT_ID || undefined,
     });
     const payload = ticket.getPayload();
 
