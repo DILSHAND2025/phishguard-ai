@@ -4,27 +4,36 @@
  * 
  * Provider Abstraction Architecture:
  * GeoLocationService
+ *  ├── MockGeoProvider (Controlled demo / test mode strictly labeled 'DEMO / SYNTHETIC DATA')
  *  ├── BackendGeoProvider (Queries /api/geoip on MAVERICK backend gateway)
- *  ├── DirectIpApiProvider (Queries ip-api.com directly as client-side fallback)
- *  └── MockGeoProvider (Controlled demo / test mode strictly labeled 'DEMO / SYNTHETIC DATA')
+ *  └── DirectIpWhoIsProvider (Queries ipwho.is directly over HTTPS with CORS support)
  * 
  * Strict Forensic Compliance:
  * 1. NEVER fabricates fake coordinates.
  * 2. If provider lookup fails, returns status: 'UNAVAILABLE' with message 'Geolocation unavailable'.
  * 3. Private / reserved IPs (RFC 1918, loopback, link-local) are flagged as 'PRIVATE_IP' and excluded from public geolocation.
  * 4. Caches repeated lookups in memory to avoid redundant network traffic.
- * 5. Clearly distinguishes OBSERVED EVIDENCE from INFERRED INFORMATION.
+ * 5. Clearly distinguishes OBSERVED EVIDENCE from ENRICHED INTELLIGENCE and INFERENCE.
  */
 
-import { isValidIP, isPrivateIP } from './emailParser.js';
+import { isValidIP, isPrivateIP, classifyIP, cleanIPString, isPublicIP, isValidIPv4, isValidIPv6, IP_CLASSIFICATION } from './emailParser.js';
 import { getApiBaseUrl } from './apiConfig.js';
 
 // Mandatory CERT-In & Court Admissibility Legal Disclaimer
 export const GEO_LEGAL_DISCLAIMER =
-  'IP GeoLocation represents observed network infrastructure and does not establish the physical identity or location of the attacker.';
+  "IP geolocation provides approximate network location of observed network infrastructure and does not establish the sender's exact physical identity or location.";
 
 // In-memory cache for IP lookups (IP -> Geolocation Record)
 const IN_MEMORY_GEO_CACHE = new Map();
+
+/**
+ * Validate numeric coordinate bounds
+ */
+export function sanitizeCoordinate(val, min, max) {
+  if (typeof val !== 'number' || isNaN(val)) return null;
+  if (val < min || val > max) return null;
+  return val;
+}
 
 /**
  * Base Provider Interface definition
@@ -76,10 +85,15 @@ export class BackendGeoProvider extends BaseGeoProvider {
 
         if (res.ok) {
           const data = await res.json();
-          if (data && (data.status === 'success' || data.countryCode || data.country)) {
+          if (data && (data.status === 'SUCCESS' || data.status === 'success' || data.countryCode || data.country)) {
+            const lat = sanitizeCoordinate(data.latitude, -90, 90);
+            const lon = sanitizeCoordinate(data.longitude, -180, 180);
             return {
               ...data,
+              latitude: lat,
+              longitude: lon,
               dataSource: 'LIVE FORENSIC TELEMETRY (Backend Gateway)',
+              provider: data.provider || 'MAVERICK Backend Gateway',
               isDemo: false
             };
           }
@@ -94,11 +108,11 @@ export class BackendGeoProvider extends BaseGeoProvider {
 }
 
 /**
- * 2. Direct IP-API Provider: Free public tier IP geolocation fallback
+ * 2. Direct ipwho.is Provider: Free public tier HTTPS IP geolocation with CORS support
  */
-export class DirectIpApiProvider extends BaseGeoProvider {
+export class DirectIpWhoIsProvider extends BaseGeoProvider {
   constructor() {
-    super('Direct IP-API Provider');
+    super('Direct ipwho.is Provider');
   }
 
   async lookup(ip) {
@@ -106,32 +120,41 @@ export class DirectIpApiProvider extends BaseGeoProvider {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2800);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-      const url = `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city,lat,lon,timezone,isp,org,as`;
-      const res = await fetch(url, { signal: controller.signal });
+      const url = `https://ipwho.is/${encodeURIComponent(ip)}`;
+      const res = await fetch(url, { 
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal 
+      });
       clearTimeout(timeoutId);
 
       if (res.ok) {
         const live = await res.json();
-        if (live.status === 'success') {
-          const asnParts = (live.as || '').split(' ');
+        if (live && live.success !== false && (live.country || live.latitude !== undefined)) {
+          const lat = sanitizeCoordinate(live.latitude, -90, 90);
+          const lon = sanitizeCoordinate(live.longitude, -180, 180);
+          const asnNum = live.connection?.asn ? `AS${live.connection.asn}` : 'Unknown ASN';
+          const org = live.connection?.org || live.connection?.isp || '';
+          const isp = live.connection?.isp || live.connection?.org || '';
+
           return {
             ip,
             country: live.country || 'Unknown Country',
-            countryCode: live.countryCode || '',
-            region: live.regionName || '',
+            countryCode: live.country_code || live.countryCode || '',
+            region: live.region || live.regionName || '',
             city: live.city || '',
-            latitude: typeof live.lat === 'number' ? live.lat : null,
-            longitude: typeof live.lon === 'number' ? live.lon : null,
-            timezone: live.timezone || '',
-            asn: asnParts[0] || 'Unknown ASN',
-            asnOrg: live.org || live.isp || '',
-            isp: live.isp || live.org || '',
+            latitude: lat,
+            longitude: lon,
+            timezone: live.timezone?.id || live.timezone || '',
+            asn: asnNum,
+            asnOrg: org,
+            isp: isp,
             networkType: 'Commercial Transit Network',
-            dataSource: 'LIVE FORENSIC TELEMETRY (ip-api.com)',
+            dataSource: 'LIVE FORENSIC TELEMETRY (ipwho.is)',
+            provider: 'ipwho.is',
             isDemo: false,
-            routingDetails: live.as ? `BGP Routing: ${live.as}` : ''
+            routingDetails: live.connection?.asn ? `BGP ASN: AS${live.connection.asn} (${isp})` : ''
           };
         }
       }
@@ -142,6 +165,9 @@ export class DirectIpApiProvider extends BaseGeoProvider {
     return null;
   }
 }
+
+// Backward-compatible alias
+export const DirectIpApiProvider = DirectIpWhoIsProvider;
 
 /**
  * 3. Mock Geo Provider: Controlled development/demonstration mode
@@ -263,10 +289,17 @@ export class MockGeoProvider extends BaseGeoProvider {
   }
 
   async lookup(ip) {
+    const isProd = Boolean(
+      (typeof import.meta !== 'undefined' && import.meta.env?.PROD) ||
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production')
+    );
+    if (isProd) return null;
+
     if (this.dataset[ip]) {
       return {
         ...this.dataset[ip],
         dataSource: 'DEMO / SYNTHETIC DATA',
+        provider: 'Controlled Synthetic Demo Provider',
         isDemo: true
       };
     }
@@ -279,12 +312,20 @@ export class MockGeoProvider extends BaseGeoProvider {
  */
 export class GeoLocationService {
   constructor(options = {}) {
-    this.cache = options.cache || IN_MEMORY_GEO_CACHE;
-    this.providers = options.providers || [
+    const isProd = Boolean(
+      (typeof import.meta !== 'undefined' && import.meta.env?.PROD) ||
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production')
+    );
+
+    this.cache = options.cache || (options.providers ? new Map() : IN_MEMORY_GEO_CACHE);
+    this.providers = options.providers || (isProd ? [
+      new BackendGeoProvider(),
+      new DirectIpWhoIsProvider()
+    ] : [
       new MockGeoProvider(),
       new BackendGeoProvider(),
-      new DirectIpApiProvider()
-    ];
+      new DirectIpWhoIsProvider()
+    ]);
   }
 
   // Swap or register a custom provider
@@ -301,16 +342,26 @@ export class GeoLocationService {
    * Resolve a single IP to forensic geographic record
    */
   async resolveIP(ip, context = {}) {
-    if (!ip || typeof ip !== 'string' || !isValidIP(ip.trim())) {
+    const rawInput = ip || '';
+    const cleanIP = cleanIPString(typeof rawInput === 'string' ? rawInput : '');
+
+    // 1. Validate IP format
+    if (!cleanIP || !isValidIP(cleanIP)) {
       return {
-        ip: ip || '',
+        ip: cleanIP || (typeof ip === 'string' ? ip : ''),
+        ipVersion: 'Unknown',
+        classification: IP_CLASSIFICATION.INVALID_IP,
+        sourceHeader: context.sourceHeader || 'None',
         status: 'INVALID_IP',
+        lookupStatus: 'INVALID_IP',
         error: 'Invalid IP address',
         role: context.role || 'UNKNOWN',
         roleLabel: context.roleLabel || 'Invalid Address',
         isPrivate: false,
+        geoAvailable: false,
         country: 'Invalid IP',
         countryCode: '',
+        region: '',
         city: '',
         latitude: null,
         longitude: null,
@@ -318,23 +369,31 @@ export class GeoLocationService {
         asn: '',
         asnOrg: '',
         timezone: '',
+        provider: 'None',
         isDemo: false,
         dataSource: 'NONE',
-        observedEvidence: 'IP address format does not conform to valid IPv4 or IPv6 standards',
-        inferredContext: 'Non-routable malformed token'
+        observedEvidence: `Observed token "${ip}" does not conform to valid IPv4 or IPv6 standards.`,
+        inferredContext: 'Non-routable malformed token excluded from infrastructure intelligence.',
+        disclaimer: GEO_LEGAL_DISCLAIMER
       };
     }
 
-    const cleanIP = ip.trim();
+    const classification = classifyIP(cleanIP);
+    const ipVersion = isValidIPv6(cleanIP) ? 'IPv6' : 'IPv4';
 
-    // 1. Check for Private / Reserved / Local IP
-    if (isPrivateIP(cleanIP)) {
+    // 2. Check for Private / Reserved / Local IP (SSRF Protection & Non-Routable Filtering)
+    if (!isPublicIP(cleanIP)) {
       return {
         ip: cleanIP,
+        ipVersion,
+        classification,
+        sourceHeader: context.sourceHeader || 'Headers',
         status: 'PRIVATE_IP',
+        lookupStatus: 'PRIVATE_IP',
         isPrivate: true,
+        geoAvailable: false,
         role: context.role || 'PRIVATE',
-        roleLabel: context.roleLabel || 'Internal Network Hop (Private/RFC 1918)',
+        roleLabel: context.roleLabel || `${classification} (Non-Routable)`,
         country: 'Private / Reserved Network',
         countryCode: 'LAN',
         region: 'Internal Corporate Subnet',
@@ -345,72 +404,108 @@ export class GeoLocationService {
         asn: 'N/A (Private/Local Subnet)',
         asnOrg: 'Internal Network Entity',
         timezone: '',
+        provider: 'Internal Filter',
         isDemo: false,
         dataSource: 'INTERNAL_FILTER',
-        observedEvidence: `IP ${cleanIP} belongs to reserved non-routable address space (RFC 1918 / Loopback / Link-Local)`,
-        inferredContext: 'Private network hop excluded from public geolocation lookups'
+        observedEvidence: `IP ${cleanIP} belongs to reserved non-routable address space (RFC 1918 / Loopback / Link-Local / Reserved).`,
+        inferredContext: 'Private network hop excluded from public geolocation lookups.',
+        disclaimer: GEO_LEGAL_DISCLAIMER
       };
     }
 
-    // 2. Check in-memory cache to prevent duplicate calls
+    // 3. Check in-memory cache to prevent duplicate calls
     if (this.cache.has(cleanIP)) {
       const cached = this.cache.get(cleanIP);
       return {
         ...cached,
-        role: context.role || cached.role || 'UNKNOWN',
-        roleLabel: context.roleLabel || cached.roleLabel || 'Network Indicator'
+        role: context.role || cached.role || 'OBSERVED_IP',
+        roleLabel: context.roleLabel || cached.roleLabel || 'Observed Public IP',
+        sourceHeader: context.sourceHeader || cached.sourceHeader || 'Headers'
       };
     }
 
-    // 3. Query configured providers sequentially
-    for (const provider of this.providers) {
+    // 4. Query configured providers sequentially
+    const isProd = Boolean(
+      (typeof import.meta !== 'undefined' && import.meta.env?.PROD) ||
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production')
+    );
+    const providersToQuery = (context.preferLive || isProd)
+      ? [...this.providers.filter(p => !(p instanceof MockGeoProvider)), ...this.providers.filter(p => p instanceof MockGeoProvider)]
+      : this.providers;
+
+    let lastFailureInfo = null;
+
+    for (const provider of providersToQuery) {
       try {
         const result = await provider.lookup(cleanIP);
-        if (result && (result.country || result.city || result.latitude !== null)) {
-          const record = {
-            ip: cleanIP,
-            status: 'SUCCESS',
-            isPrivate: false,
-            role: context.role || 'OBSERVED_IP',
-            roleLabel: context.roleLabel || 'Observed Public IP',
-            country: result.country || 'Unknown Country',
-            countryCode: result.countryCode || '',
-            region: result.region || '',
-            city: result.city || '',
-            latitude: typeof result.latitude === 'number' ? result.latitude : null,
-            longitude: typeof result.longitude === 'number' ? result.longitude : null,
-            timezone: result.timezone || '',
-            isp: result.isp || result.asnOrg || 'Unknown ISP',
-            asn: result.asn || 'AS-UNKNOWN',
-            asnOrg: result.asnOrg || result.isp || 'Autonomous System',
-            networkType: result.networkType || 'Standard Transit Infrastructure',
-            isProxyOrVpn: Boolean(result.isProxyOrVpn),
-            riskLevel: result.riskLevel || (result.isProxyOrVpn ? 'HIGH' : 'LOW'),
-            routingDetails: result.routingDetails || `Observed routing via ${result.asn || 'upstream transit'}`,
-            isDemo: Boolean(result.isDemo),
-            dataSource: result.dataSource || 'LIVE FORENSIC TELEMETRY',
-            observedEvidence: `Observed IP ${cleanIP} geolocates to ${result.city ? `${result.city}, ` : ''}${result.country || 'Unknown'} (${result.asn || 'Unknown ASN'} - ${result.asnOrg || result.isp || 'Transit'})`,
-            inferredContext: result.isProxyOrVpn 
-              ? 'Anonymizing relay / VPN egress infrastructure often leveraged in evasion directives' 
-              : 'Standard internet transit infrastructure routing'
-          };
+        if (result) {
+          // If the provider explicitly signaled failure/rate limit
+          if (result.status === 'UNAVAILABLE' || result.lookupStatus === 'RATE_LIMITED' || (result.country === 'Geolocation unavailable' && result.latitude === null)) {
+            lastFailureInfo = result;
+            continue;
+          }
 
-          this.cache.set(cleanIP, record);
-          return record;
+          if ((result.country && result.country !== 'Geolocation unavailable') || result.city || typeof result.latitude === 'number') {
+            const lat = sanitizeCoordinate(result.latitude, -90, 90);
+            const lon = sanitizeCoordinate(result.longitude, -180, 180);
+
+            const record = {
+              ip: cleanIP,
+              ipVersion,
+              classification,
+              sourceHeader: context.sourceHeader || 'Headers',
+              status: 'SUCCESS',
+              lookupStatus: 'SUCCESS',
+              isPrivate: false,
+              geoAvailable: true,
+              role: context.role || 'OBSERVED_IP',
+              roleLabel: context.roleLabel || 'Observed Public IP',
+              country: result.country || 'Unknown Country',
+              countryCode: result.countryCode || '',
+              region: result.region || '',
+              city: result.city || '',
+              latitude: lat,
+              longitude: lon,
+              timezone: result.timezone || '',
+              isp: result.isp || result.asnOrg || 'Unknown ISP',
+              asn: result.asn || 'AS-UNKNOWN',
+              asnOrg: result.asnOrg || result.isp || 'Autonomous System',
+              networkType: result.networkType || 'Standard Transit Infrastructure',
+              isProxyOrVpn: Boolean(result.isProxyOrVpn),
+              riskLevel: result.riskLevel || (result.isProxyOrVpn ? 'HIGH' : 'LOW'),
+              routingDetails: result.routingDetails || `Observed routing via ${result.asn || 'upstream transit'}`,
+              provider: result.provider || provider.name,
+              isDemo: Boolean(result.isDemo),
+              dataSource: result.dataSource || 'LIVE FORENSIC TELEMETRY',
+              observedEvidence: `Observed IP ${cleanIP} geolocates to ${result.city ? `${result.city}, ` : ''}${result.country || 'Unknown'} (${result.asn || 'Unknown ASN'} - ${result.asnOrg || result.isp || 'Transit'}).`,
+              inferredContext: result.isProxyOrVpn 
+                ? 'Anonymizing relay / VPN egress infrastructure often leveraged in evasion directives.' 
+                : 'Standard internet transit infrastructure routing.',
+              disclaimer: GEO_LEGAL_DISCLAIMER
+            };
+
+            this.cache.set(cleanIP, record);
+            return record;
+          }
         }
-      } catch {
-        // Continue to next provider
+      } catch (err) {
+        lastFailureInfo = { error: err.message };
       }
     }
 
-    // 4. All providers failed or offline -> Return UNAVAILABLE without fake coordinates
+    // 5. All providers failed or offline -> Return UNAVAILABLE without fake coordinates
     const unavailableRecord = {
       ip: cleanIP,
+      ipVersion,
+      classification,
+      sourceHeader: context.sourceHeader || 'Headers',
       status: 'UNAVAILABLE',
-      error: 'Geolocation unavailable',
+      lookupStatus: lastFailureInfo?.lookupStatus || 'UNAVAILABLE',
+      error: lastFailureInfo?.error || 'Geolocation unavailable',
       role: context.role || 'UNKNOWN',
       roleLabel: context.roleLabel || 'Observed Public IP',
       isPrivate: false,
+      geoAvailable: false,
       country: 'Geolocation unavailable',
       countryCode: '',
       region: '',
@@ -421,10 +516,12 @@ export class GeoLocationService {
       asn: 'AS-UNKNOWN',
       asnOrg: 'Autonomous System resolution offline',
       timezone: '',
+      provider: 'None',
       isDemo: false,
       dataSource: 'UNAVAILABLE',
-      observedEvidence: `Observed public IP ${cleanIP} (Geolocation intelligence lookup unavailable)`,
-      inferredContext: 'Geographic attribution unavailable; proceeding with remaining multi-layer forensic evidence'
+      observedEvidence: `Observed public IP ${cleanIP} (Geolocation intelligence lookup unavailable).`,
+      inferredContext: 'Geographic attribution unavailable; proceeding with remaining multi-layer forensic evidence.',
+      disclaimer: GEO_LEGAL_DISCLAIMER
     };
 
     this.cache.set(cleanIP, unavailableRecord);
@@ -441,7 +538,7 @@ export class GeoLocationService {
 
     const uniqueMap = new Map();
     indicators.forEach(ind => {
-      const ip = typeof ind === 'string' ? ind.trim() : (ind.ip || '').trim();
+      const ip = typeof ind === 'string' ? cleanIPString(ind) : cleanIPString(ind.ip || '');
       if (ip && !uniqueMap.has(ip)) {
         uniqueMap.set(ip, typeof ind === 'object' ? ind : { ip });
       }

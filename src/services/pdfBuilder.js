@@ -616,8 +616,10 @@ export function generateForensicPdf(report) {
 
       drawGeoRow('IP Address:', node.ip, 'Geographic Location:', `${node.city || 'Unknown'}, ${node.country || 'Unknown'}`);
       drawGeoRow('ASN Identifier:', node.asn, 'ASN Organization:', node.asnOrg);
-      drawGeoRow('Network Type:', node.networkType, 'Proxy / VPN Egress:', node.isProxyOrVpn ? 'YES (ANONYMIZED)' : 'NO (DIRECT)');
-      drawGeoRow('Coordinates:', node.lat ? `${node.lat}, ${node.lon}` : 'N/A', 'Topology Role:', node.role || 'ORIGINATING HOP');
+      const coordStr = (typeof node.latitude === 'number' && typeof node.longitude === 'number')
+        ? `${node.latitude.toFixed(4)}, ${node.longitude.toFixed(4)}`
+        : (node.lat ? `${node.lat}, ${node.lon}` : 'N/A');
+      drawGeoRow('Coordinates:', coordStr, 'Topology Role:', node.role || 'ORIGINATING HOP');
     }
 
     // Legal disclaimer callout

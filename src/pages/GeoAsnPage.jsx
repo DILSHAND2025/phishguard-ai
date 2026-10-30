@@ -13,67 +13,23 @@ import { GEO_LEGAL_DISCLAIMER } from '../services/geoAsnService';
 import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 
 export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
-  const geoInfo = currentAnalysis?.geoInfo || {
-    ip: '185.220.101.45',
-    country: 'Germany',
-    countryCode: 'DE',
-    region: 'Hesse',
-    city: 'Frankfurt am Main',
-    asn: 'AS9009',
-    asnOrg: 'M247 Ltd Europe',
-    isp: 'M247 Europe S.R.L.',
-    networkType: 'Tor Exit Node / Anonymizing Relay',
-    riskLevel: 'HIGH',
-    isProxyOrVpn: true,
-    routingDetails: 'BGP Prefix: 185.220.100.0/22 | Tor Directory Authority Verified'
-  };
+  const geoRecordsForMap = (Array.isArray(currentAnalysis?.geoList) && currentAnalysis.geoList.length > 0)
+    ? currentAnalysis.geoList
+    : (currentAnalysis?.geoInfo ? [currentAnalysis.geoInfo] : []);
 
-  const originIP = currentAnalysis?.email?.originatingIP || geoInfo.ip || '185.220.101.45';
+  const geoInfo = currentAnalysis?.geoInfo || geoRecordsForMap.find(g => !g.isPrivate) || geoRecordsForMap[0] || null;
+  const originIP = currentAnalysis?.email?.originatingIP || geoInfo?.ip || 'None Observed';
 
-  const infrastructureList = [
-    geoInfo,
-    {
-      ip: '45.154.255.82',
-      country: 'Netherlands',
-      countryCode: 'NL',
-      region: 'North Holland',
-      city: 'Amsterdam',
-      asn: 'AS202425',
-      asnOrg: 'IP Volume Inc',
-      isp: 'IP Volume Networks',
-      networkType: 'Commercial Hosting / Proxy Egress',
-      riskLevel: 'HIGH',
-      isProxyOrVpn: true,
-      routingDetails: 'Fast-Flux Reverse Proxy Farm'
-    },
-    {
-      ip: '194.26.29.110',
-      country: 'Romania',
-      countryCode: 'RO',
-      region: 'Bucharest',
-      city: 'Bucharest',
-      asn: 'AS48693',
-      asnOrg: 'HostRoyale Egress Relay',
-      isp: 'HostRoyale Ltd',
-      networkType: 'Transit Relay Endpoint',
-      riskLevel: 'MEDIUM',
-      isProxyOrVpn: true,
-      routingDetails: 'Intermediate SMTP Routing Relay'
-    }
-  ];
+  const infrastructureList = geoRecordsForMap.length > 0 ? geoRecordsForMap : (geoInfo ? [geoInfo] : []);
 
   const correlationChain = [
-    { step: '01', title: 'Email Envelope', detail: `Received from ${currentAnalysis?.email?.fromParsed?.address || 'cfo-finance-update@internal-corp-portal.online'}` },
-    { step: '02', title: 'Sender Domain', detail: `${currentAnalysis?.email?.fromParsed?.domain || 'internal-corp-portal.online'} (Typosquat Indicator)` },
-    { step: '03', title: 'Originating IP', detail: `${originIP} (Extracted from Received Hop)` },
-    { step: '04', title: 'Autonomous System', detail: `${geoInfo.asn} (${geoInfo.asnOrg})` },
-    { step: '05', title: 'Network Topology', detail: `${geoInfo.networkType || 'Tor Relay Node'}` },
-    { step: '06', title: 'Observed GeoLocation', detail: `Observed infrastructure geolocates to ${geoInfo.country}` }
+    { step: '01', title: 'Email Envelope', detail: `Received from ${currentAnalysis?.email?.fromParsed?.address || currentAnalysis?.email?.sender || 'Ingested Sender'}` },
+    { step: '02', title: 'Sender Domain', detail: `${currentAnalysis?.email?.fromParsed?.domain || 'Email Ingress Domain'}` },
+    { step: '03', title: 'Originating IP', detail: `${originIP} (${currentAnalysis?.email?.originatingIPSource || 'Ingress Hop'})` },
+    { step: '04', title: 'Autonomous System', detail: `${geoInfo?.asn || 'AS-UNKNOWN'} (${geoInfo?.asnOrg || 'Transit'})` },
+    { step: '05', title: 'Network Topology', detail: `${geoInfo?.networkType || (geoInfo?.isPrivate ? 'Internal Network' : 'Transit Infrastructure')}` },
+    { step: '06', title: 'Observed GeoLocation', detail: geoInfo?.country ? `Observed infrastructure geolocates to ${geoInfo.country}` : 'No public coordinates' }
   ];
-
-  const geoRecordsForMap = (currentAnalysis?.geoList && currentAnalysis.geoList.length > 0)
-    ? currentAnalysis.geoList
-    : infrastructureList;
 
   return (
     <div className="space-y-6 pb-12 font-sans text-slate-900">
@@ -136,7 +92,7 @@ export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
             Legal Chain-of-Custody Attribution Standard:
           </span>
           <p className="text-slate-700 text-xs leading-relaxed">
-            <strong>&quot;The observed IP infrastructure geolocates to {geoInfo.country}.&quot;</strong>
+            <strong>&quot;The observed IP infrastructure geolocates to {geoInfo?.country || 'unresolved / private infrastructure'}.&quot;</strong>
           </p>
           <p className="text-slate-500 text-[11px] leading-relaxed">
             {GEO_LEGAL_DISCLAIMER}
@@ -162,7 +118,7 @@ export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
               Originating Egress Node
             </span>
             <span className="px-2 py-0.5 rounded bg-red-50 text-red-700 text-[10px] font-bold border border-red-200">
-              {geoInfo.riskLevel || 'HIGH RISK'}
+              {geoInfo?.riskLevel || (geoInfo ? 'EVALUATED' : 'CLEAN / NONE')}
             </span>
           </div>
 
@@ -177,35 +133,35 @@ export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
                 <span className="text-[10px] uppercase text-slate-500 block font-semibold">Country</span>
                 <span className="font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
                   <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                  {geoInfo.country} ({geoInfo.countryCode})
+                  {geoInfo?.country || 'None / Private'} {geoInfo?.countryCode ? `(${geoInfo.countryCode})` : ''}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] uppercase text-slate-500 block font-semibold">City / Region</span>
-                <span className="text-slate-700 mt-0.5 block">{geoInfo.city || 'Frankfurt'}, {geoInfo.region || 'Hesse'}</span>
+                <span className="text-slate-700 mt-0.5 block">{geoInfo?.city || 'Unresolved'}, {geoInfo?.region || 'N/A'}</span>
               </div>
             </div>
 
             <div>
               <span className="text-[10px] uppercase text-slate-500 block font-semibold">Autonomous System (ASN)</span>
-              <span className="font-bold text-slate-900 font-mono">{geoInfo.asn}</span>
-              <span className="text-slate-600 block text-[11px] mt-0.5">{geoInfo.asnOrg}</span>
+              <span className="font-bold text-slate-900 font-mono">{geoInfo?.asn || 'AS-UNKNOWN'}</span>
+              <span className="text-slate-600 block text-[11px] mt-0.5">{geoInfo?.asnOrg || 'N/A'}</span>
             </div>
 
             <div>
               <span className="text-[10px] uppercase text-slate-500 block font-semibold">ISP</span>
-              <span className="text-slate-800 font-medium">{geoInfo.isp || geoInfo.asnOrg}</span>
+              <span className="text-slate-800 font-medium">{geoInfo?.isp || geoInfo?.asnOrg || 'Unresolved'}</span>
             </div>
 
             <div>
               <span className="text-[10px] uppercase text-slate-500 block font-semibold">Classification</span>
               <span className="inline-block px-2.5 py-1 rounded bg-slate-50 border border-slate-200 text-slate-800 font-medium text-xs mt-1">
-                {geoInfo.networkType}
+                {geoInfo?.classification || geoInfo?.networkType || (geoInfo?.isPrivate ? 'Private / Reserved Network' : 'Standard Ingress')}
               </span>
             </div>
 
             <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-              {geoInfo.routingDetails}
+              {geoInfo?.observedEvidence || geoInfo?.routingDetails || 'No additional routing telemetry available.'}
             </div>
           </div>
         </div>
