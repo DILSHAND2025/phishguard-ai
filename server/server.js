@@ -291,6 +291,63 @@ const server = http.createServer(async (req, res) => {
 
     // SSRF & Non-Routable IP Protection: Never send private/reserved/loopback addresses upstream
     if (!isPublicIP(cleanIP)) {
+      let country = 'Private / Internal Network';
+      let countryCode = 'LAN';
+      let region = 'Internal Corporate Subnet';
+      let city = 'Local Area Network';
+      let isp = 'Private Infrastructure';
+      let asn = 'N/A (Private)';
+      let role = 'PRIVATE';
+      let roleLabel = 'Private Intranet (RFC 1918)';
+      let observedEvidence = `Observed IP ${cleanIP} belongs to private ip intranet address space (RFC 1918).`;
+      let inferredContext = 'Internal non-routable corporate hop excluded from public geolocation lookups.';
+
+      if (classification === IP_CLASSIFICATION.TEST_NET_IP) {
+        country = 'Documentation / Test Network';
+        countryCode = 'TEST';
+        region = 'RFC 5737 / RFC 3849 Benchmark & Documentation Range';
+        city = 'Reserved Test-Net Subnet';
+        isp = 'IANA Special-Purpose (Documentation)';
+        asn = 'N/A (Documentation Subnet)';
+        role = 'RESERVED / TEST-NET';
+        roleLabel = 'Documentation / TEST-NET (RFC 5737)';
+        observedEvidence = `Observed IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
+        inferredContext = 'Non-routable documentation address; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
+        country = 'Loopback / Host-Local Network';
+        countryCode = 'LOK';
+        region = 'Local Host System Interface';
+        city = 'Localhost (Loopback)';
+        isp = 'Host Software Loopback';
+        asn = 'N/A (Loopback)';
+        role = 'LOOPBACK';
+        roleLabel = 'Loopback Address';
+        observedEvidence = `Observed IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
+        inferredContext = 'Host-internal loopback address; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
+        country = 'Link-Local Network';
+        countryCode = 'LL';
+        region = 'Auto-Configured Segment';
+        city = 'Link-Local Subnet';
+        isp = 'Link-Local Infrastructure';
+        asn = 'N/A (Link-Local)';
+        role = 'LINK_LOCAL';
+        roleLabel = 'Link-Local Address (RFC 3927)';
+        observedEvidence = `Observed IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
+        inferredContext = 'Non-routable link-local segment hop excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
+        country = 'Reserved / Special Network';
+        countryCode = 'RES';
+        region = 'Special-Purpose Routing Range';
+        city = 'Reserved Range';
+        isp = 'IANA Special-Purpose';
+        asn = 'N/A (Special-Purpose)';
+        role = 'RESERVED';
+        roleLabel = 'Reserved / Special-Purpose';
+        observedEvidence = `Observed IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
+        inferredContext = 'Non-routable special-purpose network entity excluded from public geolocation lookups.';
+      }
+
       return sendJson(res, 200, {
         ip: cleanIP,
         ipVersion,
@@ -299,20 +356,22 @@ const server = http.createServer(async (req, res) => {
         lookupStatus: 'PRIVATE_IP',
         isPrivate: true,
         geoAvailable: false,
-        error: 'Private/reserved non-routable IP address',
-        country: 'Private / Reserved Network',
-        countryCode: 'LAN',
-        region: 'Internal Corporate Subnet',
-        city: 'Local Area Network',
+        error: 'Non-routable IP address excluded from public geolocation',
+        role,
+        roleLabel,
+        country,
+        countryCode,
+        region,
+        city,
         latitude: null,
         longitude: null,
-        isp: 'Private Infrastructure',
-        asn: 'N/A',
-        asnOrg: 'Internal Network Entity',
+        isp,
+        asn,
+        asnOrg: isp,
         provider: 'Internal Filter',
         dataSource: 'INTERNAL_FILTER',
-        observedEvidence: `Observed IP ${cleanIP} belongs to ${classification.toLowerCase()} address space.`,
-        inferredContext: 'Internal non-routable hop excluded from public geolocation lookups.'
+        observedEvidence,
+        inferredContext
       });
     }
 

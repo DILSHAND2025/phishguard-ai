@@ -293,6 +293,12 @@ export const ForensicGeoMap = ({
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-sky-500"></span> Mail Relay
           </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Test-Net
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-slate-400"></span> Private / Local
+          </span>
         </div>
       </div>
 
@@ -380,9 +386,17 @@ export const ForensicGeoMap = ({
                             ? 'bg-red-50 text-red-700 border border-red-200'
                             : rec.role === 'URL_HOST'
                               ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                              : rec.isPrivate
-                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                : 'bg-sky-50 text-sky-700 border border-sky-200'
+                              : rec.role === 'RESERVED / TEST-NET' || rec.classification?.includes('TEST-NET')
+                                ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                                : rec.role === 'LOOPBACK' || rec.classification?.includes('Loopback')
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : rec.role === 'LINK_LOCAL' || rec.classification?.includes('Link-local')
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    : rec.role === 'RESERVED' || rec.classification?.includes('Reserved')
+                                      ? 'bg-yellow-50 text-yellow-800 border border-yellow-300'
+                                      : rec.role === 'PRIVATE' || rec.classification?.includes('Private')
+                                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                        : 'bg-sky-50 text-sky-700 border border-sky-200'
                         }`}>
                           {rec.role || 'IP'}
                         </span>

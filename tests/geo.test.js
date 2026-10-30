@@ -33,6 +33,7 @@ import {
   isValidIP, 
   isPrivateIP, 
   isPublicIP,
+  isPrivateOrReservedIP,
   classifyIP,
   cleanIPString,
   IP_CLASSIFICATION,
@@ -502,6 +503,118 @@ Access portal: http://45.154.255.82/auth/login`;
     // Verify Forensic Legal Disclaimer is compliant
     assert.ok(GEO_LEGAL_DISCLAIMER.includes('observed network infrastructure'));
     assert.ok(GEO_LEGAL_DISCLAIMER.includes('approximate network location'));
+  });
+
+  // Case 17: Strict IP classification taxonomy (RFC 5737 TEST-NET, RFC 1918 Private, Loopback, Link-Local)
+  await t.test('17. Strict IP classification taxonomy (TEST-NET-1, TEST-NET-2, TEST-NET-3, IPv6 Documentation, Private RFC 1918, Loopback, Link-Local, and Public)', async () => {
+    // 1. TEST-NET-1 (192.0.2.0/24)
+    assert.equal(classifyIP('192.0.2.1'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(classifyIP('192.0.2.254'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(isPublicIP('192.0.2.1'), false);
+    assert.equal(isPrivateIP('192.0.2.1'), true);
+    assert.equal(isPrivateOrReservedIP('192.0.2.1'), true);
+
+    // 2. TEST-NET-2 (198.51.100.0/24) - specifically testing 198.51.100.24
+    assert.equal(classifyIP('198.51.100.24'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(classifyIP('198.51.100.1'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(isPublicIP('198.51.100.24'), false);
+    assert.equal(isPrivateIP('198.51.100.24'), true);
+    assert.equal(isPrivateOrReservedIP('198.51.100.24'), true);
+
+    // 3. TEST-NET-3 (203.0.113.0/24)
+    assert.equal(classifyIP('203.0.113.10'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(classifyIP('203.0.113.250'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(isPublicIP('203.0.113.10'), false);
+    assert.equal(isPrivateIP('203.0.113.10'), true);
+    assert.equal(isPrivateOrReservedIP('203.0.113.10'), true);
+
+    // 4. IPv6 Documentation (2001:db8::/32)
+    assert.equal(classifyIP('2001:db8::1'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(classifyIP('2001:db8:85a3::8a2e:370:7334'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(isPublicIP('2001:db8::1'), false);
+
+    // 5. RFC 1918 Private
+    assert.equal(classifyIP('10.0.1.50'), IP_CLASSIFICATION.PRIVATE_IP);
+    assert.equal(classifyIP('172.16.0.25'), IP_CLASSIFICATION.PRIVATE_IP);
+    assert.equal(classifyIP('192.168.1.1'), IP_CLASSIFICATION.PRIVATE_IP);
+
+    // 6. Loopback
+    assert.equal(classifyIP('127.0.0.1'), IP_CLASSIFICATION.LOOPBACK_IP);
+    assert.equal(classifyIP('::1'), IP_CLASSIFICATION.LOOPBACK_IP);
+
+    // 7. Link-Local
+    assert.equal(classifyIP('169.254.10.20'), IP_CLASSIFICATION.LINK_LOCAL_IP);
+    assert.equal(classifyIP('fe80::1'), IP_CLASSIFICATION.LINK_LOCAL_IP);
+
+    // 8. Public
+    assert.equal(classifyIP('8.8.8.8'), IP_CLASSIFICATION.PUBLIC_IPV4);
+    assert.equal(classifyIP('142.250.190.46'), IP_CLASSIFICATION.PUBLIC_IPV4);
+    assert.equal(classifyIP('2607:f8b0:4002:c08::229'), IP_CLASSIFICATION.PUBLIC_IPV6);
+    assert.equal(isPublicIP('8.8.8.8'), true);
+
+    // 9. Verify EML with 198.51.100.24 is categorized as RESERVED / TEST-NET, NOT PRIVATE
+    const testNetEml = `From: "Doc Tester" <test@example.org>
+To: <target@enterprise.in>
+Subject: Documentation Test Message
+Received: from doc-server (198.51.100.24) by mx.enterprise.in; Mon, 07 Sep 2026 10:00:00 +0530
+
+Test message containing documentation test IP.`;
+
+    const parsedTestNet = await parseEmailContent(testNetEml);
+    assert.equal(parsedTestNet.originatingIP, '198.51.100.24');
+    assert.equal(parsedTestNet.originatingIPClassification, IP_CLASSIFICATION.TEST_NET_IP);
+
+    const testNetIndicators = extractNetworkIndicators(parsedTestNet);
+    const ind = testNetIndicators.find(n => n.ip === '198.51.100.24');
+    assert.ok(ind, 'Indicator found for 198.51.100.24');
+    assert.equal(ind.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(ind.role, 'RESERVED / TEST-NET', 'Role must be RESERVED / TEST-NET, not PRIVATE');
+    assert.notEqual(ind.role, 'PRIVATE', 'Must NOT be labeled as PRIVATE');
+    assert.equal(ind.isPrivate, true, 'Flagged as non-routable');
+    assert.equal(ind.geoAvailable, false, 'Not eligible for public geolocation');
+
+    // Verify resolveIP response
+    const resolvedTestNet = await defaultGeoService.resolveIP(ind.ip, ind);
+    assert.equal(resolvedTestNet.role, 'RESERVED / TEST-NET');
+    assert.equal(resolvedTestNet.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(resolvedTestNet.latitude, null);
+    assert.equal(resolvedTestNet.longitude, null);
+    assert.ok(resolvedTestNet.observedEvidence.includes('documentation/example'));
+    assert.ok(resolvedTestNet.inferredContext.includes('documentation address'));
+  });
+
+  // Case 18: Genuine public IP (8.8.8.8) live geolocation resolution
+  await t.test('18. Genuine public IP (8.8.8.8) live geolocation resolution', async () => {
+    const rawEml = `From: "Google Public DNS" <dns-admin@google.com>
+To: <target@enterprise.in>
+Subject: Google Public DNS Network Notice
+Received: from dns.google (8.8.8.8) by mx.enterprise.in; Mon, 07 Sep 2026 10:00:00 +0530
+
+Google DNS service notice.`;
+
+    const parsed = await parseEmailContent(rawEml);
+    assert.equal(parsed.originatingIP, '8.8.8.8');
+    assert.equal(parsed.originatingIPClassification, IP_CLASSIFICATION.PUBLIC_IPV4);
+
+    const networkIndicators = extractNetworkIndicators(parsed);
+    const ind = networkIndicators.find(n => n.ip === '8.8.8.8');
+    assert.ok(ind);
+    assert.equal(ind.role, 'SOURCE');
+    assert.equal(ind.isPrivate, false);
+    assert.equal(ind.geoAvailable, true);
+
+    // Resolve via defaultGeoService (preferLive)
+    const geo = await defaultGeoService.resolveIP('8.8.8.8', { ...ind, preferLive: true });
+    assert.equal(geo.ip, '8.8.8.8');
+    assert.equal(geo.ipVersion, 'IPv4');
+    assert.equal(geo.isPrivate, false);
+    assert.equal(geo.geoAvailable, true);
+    assert.equal(geo.country, 'United States');
+    assert.ok(typeof geo.latitude === 'number');
+    assert.ok(typeof geo.longitude === 'number');
+    assert.ok(geo.latitude >= -90 && geo.latitude <= 90);
+    assert.ok(geo.longitude >= -180 && geo.longitude <= 180);
+    assert.ok(geo.asn.includes('15169') || geo.asnOrg.includes('Google'));
   });
 
 });

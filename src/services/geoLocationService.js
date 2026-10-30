@@ -383,6 +383,63 @@ export class GeoLocationService {
 
     // 2. Check for Private / Reserved / Local IP (SSRF Protection & Non-Routable Filtering)
     if (!isPublicIP(cleanIP)) {
+      let country = 'Private / Internal Network';
+      let countryCode = 'LAN';
+      let region = 'Internal Corporate Subnet';
+      let city = 'Local Area Network';
+      let isp = 'Private Infrastructure';
+      let asn = 'N/A (Private/Local Subnet)';
+      let computedRole = context.role || 'PRIVATE';
+      let computedRoleLabel = context.roleLabel || 'Private Intranet (RFC 1918)';
+      let observedEvidence = `IP ${cleanIP} belongs to private ip intranet address space (RFC 1918 / RFC 4193).`;
+      let inferredContext = 'Internal non-routable corporate hop; excluded from public geolocation lookups.';
+
+      if (classification === IP_CLASSIFICATION.TEST_NET_IP) {
+        country = 'Documentation / Test Network';
+        countryCode = 'TEST';
+        region = 'RFC 5737 / RFC 3849 Benchmark & Documentation Range';
+        city = 'Reserved Test-Net Subnet';
+        isp = 'IANA Special-Purpose (Documentation)';
+        asn = 'N/A (Documentation Subnet)';
+        computedRole = context.role || 'RESERVED / TEST-NET';
+        computedRoleLabel = context.roleLabel || 'Documentation / TEST-NET (RFC 5737)';
+        observedEvidence = `IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
+        inferredContext = 'Non-routable documentation address used in test scenarios or documentation; excluded from public geolocation.';
+      } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
+        country = 'Loopback / Host-Local Network';
+        countryCode = 'LOK';
+        region = 'Local Host System Interface';
+        city = 'Localhost (Loopback)';
+        isp = 'Host Software Loopback';
+        asn = 'N/A (Loopback Interface)';
+        computedRole = context.role || 'LOOPBACK';
+        computedRoleLabel = context.roleLabel || 'Loopback Address';
+        observedEvidence = `IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
+        inferredContext = 'Host-internal loopback address; excluded from public network geolocation.';
+      } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
+        country = 'Link-Local Network';
+        countryCode = 'LL';
+        region = 'Auto-Configured Segment';
+        city = 'Link-Local Subnet';
+        isp = 'Link-Local Infrastructure';
+        asn = 'N/A (Link-Local)';
+        computedRole = context.role || 'LINK_LOCAL';
+        computedRoleLabel = context.roleLabel || 'Link-Local Address (RFC 3927)';
+        observedEvidence = `IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
+        inferredContext = 'Non-routable link-local segment hop; excluded from public geolocation.';
+      } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
+        country = 'Reserved / Special Network';
+        countryCode = 'RES';
+        region = 'Special-Purpose Routing Range';
+        city = 'Reserved Range';
+        isp = 'IANA Special-Purpose';
+        asn = 'N/A (Special-Purpose)';
+        computedRole = context.role || 'RESERVED';
+        computedRoleLabel = context.roleLabel || 'Reserved / Special-Purpose';
+        observedEvidence = `IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
+        inferredContext = 'Non-routable reserved network entity; excluded from public geolocation.';
+      }
+
       return {
         ip: cleanIP,
         ipVersion,
@@ -392,23 +449,23 @@ export class GeoLocationService {
         lookupStatus: 'PRIVATE_IP',
         isPrivate: true,
         geoAvailable: false,
-        role: context.role || 'PRIVATE',
-        roleLabel: context.roleLabel || `${classification} (Non-Routable)`,
-        country: 'Private / Reserved Network',
-        countryCode: 'LAN',
-        region: 'Internal Corporate Subnet',
-        city: 'Local Area Network',
+        role: computedRole,
+        roleLabel: computedRoleLabel,
+        country,
+        countryCode,
+        region,
+        city,
         latitude: null,
         longitude: null,
-        isp: 'Private Infrastructure',
-        asn: 'N/A (Private/Local Subnet)',
-        asnOrg: 'Internal Network Entity',
+        isp,
+        asn,
+        asnOrg: isp,
         timezone: '',
         provider: 'Internal Filter',
         isDemo: false,
         dataSource: 'INTERNAL_FILTER',
-        observedEvidence: `IP ${cleanIP} belongs to reserved non-routable address space (RFC 1918 / Loopback / Link-Local / Reserved).`,
-        inferredContext: 'Private network hop excluded from public geolocation lookups.',
+        observedEvidence,
+        inferredContext,
         disclaimer: GEO_LEGAL_DISCLAIMER
       };
     }

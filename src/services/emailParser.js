@@ -92,6 +92,9 @@ export const IP_CLASSIFICATION = {
   PRIVATE_IP: 'Private IP',
   LOOPBACK_IP: 'Loopback IP',
   LINK_LOCAL_IP: 'Link-local IP',
+  TEST_NET_IP: 'RESERVED / TEST-NET',
+  DOCUMENTATION_IP: 'RESERVED / TEST-NET',
+  RESERVED_TEST_NET: 'RESERVED / TEST-NET',
   RESERVED_IP: 'Reserved or special-purpose IP',
   INVALID_IP: 'Invalid IP'
 };
@@ -246,13 +249,13 @@ export function classifyIP(ip) {
     // Documentation ranges (RFC 5737):
     // TEST-NET-1 (192.0.2.0/24), TEST-NET-2 (198.51.100.0/24), TEST-NET-3 (203.0.113.0/24)
     if (o1 === 192 && o2 === 0 && o3 === 2) {
-      return IP_CLASSIFICATION.RESERVED_IP;
+      return IP_CLASSIFICATION.TEST_NET_IP;
     }
     if (o1 === 198 && o2 === 51 && o3 === 100) {
-      return IP_CLASSIFICATION.RESERVED_IP;
+      return IP_CLASSIFICATION.TEST_NET_IP;
     }
     if (o1 === 203 && o2 === 0 && o3 === 113) {
-      return IP_CLASSIFICATION.RESERVED_IP;
+      return IP_CLASSIFICATION.TEST_NET_IP;
     }
     // Benchmarking (RFC 2544): 198.18.0.0/15
     if (o1 === 198 && (o2 === 18 || o2 === 19)) {
@@ -302,7 +305,7 @@ export function classifyIP(ip) {
 
     // Documentation prefix: 2001:db8::/32 (RFC 3849)
     if (lower.startsWith('2001:db8:') || lower === '2001:db8::') {
-      return IP_CLASSIFICATION.RESERVED_IP;
+      return IP_CLASSIFICATION.TEST_NET_IP;
     }
 
     // BMWG benchmarking: 2001:2::/48
@@ -842,13 +845,36 @@ export function extractNetworkIndicators(parsedEmail) {
     const isPriv = isPrivateIP(cleanIP);
     const ipVersion = isValidIPv6(cleanIP) ? 'IPv6' : 'IPv4';
 
+    // Distinct non-public categorization: never conflate TEST-NET, loopback, or link-local as PRIVATE
+    let computedRole = role;
+    let computedRoleLabel = roleLabel;
+
+    if (isPriv) {
+      if (classification === IP_CLASSIFICATION.TEST_NET_IP) {
+        computedRole = 'RESERVED / TEST-NET';
+        computedRoleLabel = 'Documentation / TEST-NET (RFC 5737)';
+      } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
+        computedRole = 'LOOPBACK';
+        computedRoleLabel = 'Loopback Address';
+      } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
+        computedRole = 'LINK_LOCAL';
+        computedRoleLabel = 'Link-Local Address (RFC 3927)';
+      } else if (classification === IP_CLASSIFICATION.PRIVATE_IP) {
+        computedRole = 'PRIVATE';
+        computedRoleLabel = 'Private Intranet (RFC 1918)';
+      } else {
+        computedRole = 'RESERVED';
+        computedRoleLabel = 'Reserved / Special-Purpose';
+      }
+    }
+
     indicators.push({
       ip: cleanIP,
       ipVersion,
       classification,
       sourceHeader,
-      role: isPriv ? 'PRIVATE' : role,
-      roleLabel: isPriv ? `${roleLabel} (Private/Non-Routable)` : roleLabel,
+      role: computedRole,
+      roleLabel: computedRoleLabel,
       isPrivate: isPriv,
       geoAvailable: !isPriv,
       context,
