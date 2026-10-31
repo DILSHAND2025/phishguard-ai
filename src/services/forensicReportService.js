@@ -419,9 +419,12 @@ export async function buildForensicReport(analysisResult, options = {}) {
 
   // GeoLocation & Infrastructure Section
   const geoLocationAnalysis = {
-    status: geoInfo ? 'RESOLVED' : 'UNAVAILABLE',
+    status: geoInfo ? (geoInfo.status || 'RESOLVED') : 'UNAVAILABLE',
     primaryNode: geoInfo ? {
       ip: geoInfo.ip,
+      ipVersion: geoInfo.ipVersion || '',
+      classification: geoInfo.classification || '',
+      sourceHeader: geoInfo.sourceHeader || 'Headers',
       role: geoInfo.role || 'SOURCE',
       country: geoInfo.country || 'Unknown',
       region: geoInfo.region || 'Unknown',
@@ -430,15 +433,21 @@ export async function buildForensicReport(analysisResult, options = {}) {
       asnOrg: geoInfo.asnOrg || 'Unknown Organization',
       networkType: geoInfo.networkType || 'Direct Egress',
       isProxyOrVpn: Boolean(geoInfo.isProxyOrVpn),
-      lat: geoInfo.lat,
-      lon: geoInfo.lon
+      latitude: typeof geoInfo.latitude === 'number' ? geoInfo.latitude : (typeof geoInfo.lat === 'number' ? geoInfo.lat : null),
+      longitude: typeof geoInfo.longitude === 'number' ? geoInfo.longitude : (typeof geoInfo.lon === 'number' ? geoInfo.lon : null),
+      lat: typeof geoInfo.latitude === 'number' ? geoInfo.latitude : (typeof geoInfo.lat === 'number' ? geoInfo.lat : null),
+      lon: typeof geoInfo.longitude === 'number' ? geoInfo.longitude : (typeof geoInfo.lon === 'number' ? geoInfo.lon : null),
+      provider: geoInfo.provider || 'External Service',
+      dataSource: geoInfo.dataSource || 'LIVE FORENSIC TELEMETRY'
     } : null,
     resolvedHops: (geoList || []).filter(Boolean).map(g => ({
       ip: g.ip,
       country: g.country,
       asn: g.asn,
       networkType: g.networkType,
-      isProxyOrVpn: g.isProxyOrVpn
+      isProxyOrVpn: g.isProxyOrVpn,
+      latitude: g.latitude,
+      longitude: g.longitude
     })),
     disclaimer: GEO_LEGAL_DISCLAIMER
   };

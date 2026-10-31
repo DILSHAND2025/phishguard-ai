@@ -12,6 +12,7 @@ import {
   Crosshair
 } from 'lucide-react';
 import { GEO_LEGAL_DISCLAIMER } from '../../services/geoLocationService.js';
+import { classifyIP, IP_CLASSIFICATION } from '../../services/emailParser.js';
 
 // Custom SVG Pin Maker for Leaflet
 function createSvgIcon(role = 'SOURCE', isDemo = false) {
@@ -59,44 +60,21 @@ export const ForensicGeoMap = ({
   const markersLayerRef = useRef(null);
   const [selectedIP, setSelectedIP] = useState(null);
 
-  const [clientGeo, setClientGeo] = useState(null);
-
-  useEffect(() => {
-    fetch('https://ipapi.co/json/')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.latitude && data.longitude) {
-          setClientGeo({
-            ip: data.ip,
-            role: 'CURRENT_USER',
-            city: data.city,
-            country: data.country_name,
-            countryCode: data.country_code,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            asn: data.asn,
-            isp: data.org,
-            isDemo: false,
-            dataSource: 'ipapi.co LIVE'
-          });
-        }
-      })
-      .catch(err => console.error("Failed to fetch client geo:", err));
-  }, []);
-
-  // Prepare cleaned display records for ledger and map
+  // Prepare display records directly from email forensic telemetry (never inject user client IP)
   const displayRecords = React.useMemo(() => {
-    const baseList = (Array.isArray(geoRecords) ? geoRecords : []).filter(r => r && !r.isDemo);
-    if (clientGeo && !baseList.some(r => r.ip === clientGeo.ip)) {
-      return [...baseList, clientGeo];
-    }
-    return baseList;
-  }, [geoRecords, clientGeo]);
+    return (Array.isArray(geoRecords) ? geoRecords : []).filter(Boolean);
+  }, [geoRecords]);
 
-  // Filter records that have valid numeric coordinates with stable memoization
+  // Filter records that have valid numeric coordinates within valid geographic bounds [-90, 90] & [-180, 180]
   const geolocatedPoints = React.useMemo(() => {
     return displayRecords.filter(
-      r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude)
+      r => r && 
+           typeof r.latitude === 'number' && 
+           typeof r.longitude === 'number' && 
+           !isNaN(r.latitude) && 
+           !isNaN(r.longitude) &&
+           r.latitude >= -90 && r.latitude <= 90 &&
+           r.longitude >= -180 && r.longitude <= 180
     );
   }, [displayRecords]);
 
@@ -166,9 +144,9 @@ export const ForensicGeoMap = ({
           const safeLat = Number(record.latitude).toFixed(4);
           const safeLng = Number(record.longitude).toFixed(4);
 
-          // Build structured popup - clean white card style
+          // Build structured popup - clean card style with evidence provenance
           const popupContent = `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; min-width: 200px; padding: 4px;">
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; line-height: 1.4; color: #1e293b; min-width: 210px; padding: 4px;">
               <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
                 <strong style="color: #0f172a; font-size: 12px; font-family: monospace;">${record.ip || 'Unknown IP'}</strong>
                 <span style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; font-weight: 700;">
@@ -186,15 +164,21 @@ export const ForensicGeoMap = ({
                 <div style="color: #475569;">${record.asn || 'N/A'} • ${record.isp || record.asnOrg || 'Unknown'}</div>
               </div>
 
+              <div style="margin-bottom: 3px;">
+                <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Header Source:</span>
+                <div style="color: #475569; font-size: 10px;">${record.sourceHeader || 'Email Header'}</div>
+              </div>
+
               <div style="margin-bottom: 4px;">
                 <span style="color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 600;">Coordinates:</span>
                 <div style="color: #64748b; font-size: 10px; font-family: monospace;">${safeLat}, ${safeLng}</div>
               </div>
 
-              <div style="padding-top: 4px; border-top: 1px solid #e2e8f0; margin-top: 4px;">
+              <div style="padding-top: 4px; border-top: 1px solid #e2e8f0; margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-size: 9px; font-weight: 600; color: ${record.isDemo ? '#d97706' : '#059669'};">
-                  ${record.dataSource || 'FORENSIC TELEMETRY'}
+                  ${record.isDemo ? 'DEMO / TEST DATA' : (record.dataSource || 'LIVE TELEMETRY')}
                 </span>
+                <span style="font-size: 8px; color: #94a3b8;">${record.provider || 'Provider'}</span>
               </div>
             </div>
           `;
@@ -310,6 +294,12 @@ export const ForensicGeoMap = ({
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-sky-500"></span> Mail Relay
           </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Test-Net
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-slate-400"></span> Private / Local
+          </span>
         </div>
       </div>
 
@@ -371,6 +361,51 @@ export const ForensicGeoMap = ({
                   const isSelected = rec.ip === selectedIP;
                   const hasCoords = typeof rec.latitude === 'number' && typeof rec.longitude === 'number';
 
+                  const effectiveClassification = rec.classification || (rec.ip ? classifyIP(rec.ip) : '');
+                  const isTestNet = rec.role === 'RESERVED / TEST-NET' || effectiveClassification === IP_CLASSIFICATION.TEST_NET_IP || effectiveClassification?.includes('TEST-NET');
+                  const isLoopback = rec.role === 'LOOPBACK' || effectiveClassification === IP_CLASSIFICATION.LOOPBACK_IP || effectiveClassification?.includes('Loopback');
+                  const isLinkLocal = rec.role === 'LINK_LOCAL' || effectiveClassification === IP_CLASSIFICATION.LINK_LOCAL_IP || effectiveClassification?.includes('Link-local');
+                  const isCGNAT = rec.role === 'CGNAT' || effectiveClassification === IP_CLASSIFICATION.CGNAT || effectiveClassification?.includes('Carrier-Grade NAT');
+                  const isMulticast = rec.role === 'MULTICAST' || effectiveClassification === IP_CLASSIFICATION.MULTICAST || effectiveClassification?.includes('Multicast');
+                  const isReserved = rec.role === 'RESERVED' || effectiveClassification === IP_CLASSIFICATION.RESERVED_IP || effectiveClassification?.includes('Reserved');
+                  const isPrivate = rec.role === 'PRIVATE' || effectiveClassification === IP_CLASSIFICATION.PRIVATE_IP || effectiveClassification?.includes('Private');
+
+                  const badgeText = isTestNet
+                    ? 'RESERVED / TEST-NET'
+                    : isLoopback
+                      ? 'LOOPBACK'
+                      : isLinkLocal
+                        ? 'LINK_LOCAL'
+                        : isCGNAT
+                          ? 'CGNAT'
+                          : isMulticast
+                            ? 'MULTICAST'
+                            : isReserved
+                              ? 'RESERVED'
+                              : isPrivate
+                                ? 'PRIVATE'
+                                : (rec.role || 'IP');
+
+                  const badgeColor = isTestNet
+                    ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                    : isLoopback
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : isLinkLocal
+                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        : isCGNAT
+                          ? 'bg-cyan-50 text-cyan-800 border border-cyan-300'
+                          : isMulticast
+                            ? 'bg-pink-50 text-pink-800 border border-pink-300'
+                            : isReserved
+                              ? 'bg-yellow-50 text-yellow-800 border border-yellow-300'
+                              : isPrivate
+                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                : rec.role === 'SOURCE'
+                                  ? 'bg-red-50 text-red-700 border border-red-200'
+                                  : rec.role === 'URL_HOST'
+                                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                                    : 'bg-sky-50 text-sky-700 border border-sky-200';
+
                   return (
                     <div
                       key={idx}
@@ -382,19 +417,18 @@ export const ForensicGeoMap = ({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="font-mono font-bold text-slate-900 text-xs truncate">
-                          {rec.ip}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          rec.role === 'SOURCE' 
-                            ? 'bg-red-50 text-red-700 border border-red-200'
-                            : rec.role === 'URL_HOST'
-                              ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                              : rec.isPrivate
-                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                : 'bg-sky-50 text-sky-700 border border-sky-200'
-                        }`}>
-                          {rec.role || 'IP'}
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-mono font-bold text-slate-900 text-xs truncate">
+                            {rec.ip}
+                          </span>
+                          {rec.ipVersion && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-mono font-semibold">
+                              {rec.ipVersion}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${badgeColor}`}>
+                          {badgeText}
                         </span>
                       </div>
 
@@ -409,13 +443,19 @@ export const ForensicGeoMap = ({
                       </div>
 
                       <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                        ISP: {rec.isp || rec.asnOrg || 'Unknown'}
+                        {rec.classification ? `${rec.classification} • ` : ''}ISP: {rec.isp || rec.asnOrg || 'Unknown'}
                       </div>
+
+                      {rec.sourceHeader && (
+                        <div className="text-[9px] text-slate-400 truncate mt-0.5">
+                          Source: {rec.sourceHeader}
+                        </div>
+                      )}
 
                       {/* Source attribution tag */}
                       <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[9px]">
                         <span className={rec.isDemo ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
-                          {rec.isDemo ? 'DEMO DATA' : hasCoords ? 'LIVE TELEMETRY' : rec.status}
+                          {rec.isDemo ? 'DEMO DATA' : hasCoords ? 'LIVE TELEMETRY' : (rec.status || 'UNRESOLVED')}
                         </span>
                         {hasCoords && (
                           <span className="text-slate-600 hover:text-slate-900 hover:underline flex items-center gap-0.5 font-medium">

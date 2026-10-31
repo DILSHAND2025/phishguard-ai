@@ -22,7 +22,14 @@ import { analyzeAttachment } from '../src/services/attachmentForensics.js';
 import { analyzeEmailAuthentication } from '../src/services/emailAuthService.js';
 import { buildForensicReport } from '../src/services/forensicReportService.js';
 import { generateForensicPdf, computePdfFileHash } from '../src/services/pdfBuilder.js';
-import { isPrivateOrReservedIP } from '../src/services/emailParser.js';
+import { 
+  isValidIP, 
+  isPublicIP, 
+  classifyIP, 
+  cleanIPString, 
+  isPrivateOrReservedIP,
+  IP_CLASSIFICATION 
+} from '../src/services/emailParser.js';
 import { OAuth2Client } from 'google-auth-library';
 import { 
   saveCase, 
@@ -265,32 +272,136 @@ const server = http.createServer(async (req, res) => {
 
   // GeoIP endpoint
   if (pathname === '/api/geoip') {
-    const ip = parsedUrl.query.ip;
-    if (!ip) return sendJson(res, 400, { error: 'Missing ip parameter', status: 'INVALID_INPUT' });
+    const rawIp = parsedUrl.query.ip;
+    if (!rawIp) return sendJson(res, 400, { error: 'Missing ip parameter in request query', status: 'INVALID_INPUT' });
 
-    // Validate IP format
-    const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    const isIPv4 = ipv4Regex.test(ip.trim());
-    const isIPv6 = ip.includes(':');
-    if (!isIPv4 && !isIPv6) {
-      return sendJson(res, 400, { ip, status: 'INVALID_IP', error: 'Invalid IP address format' });
+    const cleanIP = cleanIPString(rawIp);
+    if (!cleanIP || !isValidIP(cleanIP)) {
+      return sendJson(res, 400, { 
+        ip: cleanIP || rawIp, 
+        status: 'INVALID_IP', 
+        lookupStatus: 'INVALID_IP',
+        classification: IP_CLASSIFICATION.INVALID_IP,
+        error: 'Invalid IPv4 or IPv6 address format' 
+      });
     }
 
-    // Check private / reserved IP (SSRF Protection)
-    const cleanIP = ip.trim().toLowerCase();
-    if (isPrivateOrReservedIP(cleanIP)) {
+    const classification = classifyIP(cleanIP);
+    const ipVersion = cleanIP.includes(':') ? 'IPv6' : 'IPv4';
+
+    // SSRF & Non-Routable IP Protection: Never send private/reserved/loopback addresses upstream
+    if (!isPublicIP(cleanIP)) {
+      let country = 'Private / Internal Network';
+      let countryCode = 'LAN';
+      let region = 'Internal Corporate Subnet';
+      let city = 'Local Area Network';
+      let isp = 'Private Infrastructure';
+      let asn = 'N/A (Private)';
+      let networkType = 'Private Intranet (RFC 1918)';
+      let role = 'PRIVATE';
+      let roleLabel = 'Private Intranet (RFC 1918)';
+      let observedEvidence = `Observed IP ${cleanIP} belongs to private ip intranet address space (RFC 1918).`;
+      let inferredContext = 'Internal non-routable corporate hop excluded from public geolocation lookups.';
+
+      if (classification === IP_CLASSIFICATION.TEST_NET_IP) {
+        country = 'Documentation / Test Network';
+        countryCode = 'TEST';
+        region = 'RFC 5737 / RFC 3849 Benchmark & Documentation Range';
+        city = 'Reserved Test-Net Subnet';
+        isp = 'IANA Special-Purpose (Documentation)';
+        asn = 'N/A (Documentation Subnet)';
+        networkType = 'Documentation / TEST-NET Subnet (RFC 5737)';
+        role = 'RESERVED / TEST-NET';
+        roleLabel = 'Documentation / TEST-NET (RFC 5737)';
+        observedEvidence = `Observed IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
+        inferredContext = 'Non-routable documentation address; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
+        country = 'Loopback / Host-Local Network';
+        countryCode = 'LOK';
+        region = 'Local Host System Interface';
+        city = 'Localhost (Loopback)';
+        isp = 'Host Software Loopback';
+        asn = 'N/A (Loopback)';
+        networkType = 'Host-Local Loopback (RFC 1122)';
+        role = 'LOOPBACK';
+        roleLabel = 'Loopback Address';
+        observedEvidence = `Observed IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
+        inferredContext = 'Host-internal loopback address; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
+        country = 'Link-Local Network';
+        countryCode = 'LL';
+        region = 'Auto-Configured Segment';
+        city = 'Link-Local Subnet';
+        isp = 'Link-Local Infrastructure';
+        asn = 'N/A (Link-Local)';
+        networkType = 'Link-Local Subnet (RFC 3927)';
+        role = 'LINK_LOCAL';
+        roleLabel = 'Link-Local Address (RFC 3927)';
+        observedEvidence = `Observed IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
+        inferredContext = 'Non-routable link-local segment hop excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.CGNAT) {
+        country = 'Carrier-Grade NAT Network';
+        countryCode = 'CGN';
+        region = 'Shared Address Space';
+        city = 'CGNAT Pool (RFC 6598)';
+        isp = 'Carrier-Grade NAT';
+        asn = 'N/A (CGNAT)';
+        networkType = 'Carrier-Grade NAT Subnet (RFC 6598)';
+        role = 'CGNAT';
+        roleLabel = 'Carrier-Grade NAT (RFC 6598)';
+        observedEvidence = `Observed IP ${cleanIP} belongs to Carrier-Grade NAT address space (RFC 6598).`;
+        inferredContext = 'Shared address space; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.MULTICAST) {
+        country = 'Multicast Network';
+        countryCode = 'MC';
+        region = 'Multicast Range';
+        city = 'Multicast Group';
+        isp = 'Multicast Group (RFC 5771)';
+        asn = 'N/A (Multicast)';
+        networkType = 'Multicast Subnet (RFC 5771)';
+        role = 'MULTICAST';
+        roleLabel = 'Multicast Address (RFC 5771)';
+        observedEvidence = `Observed IP ${cleanIP} is a multicast address (RFC 5771 / RFC 4291).`;
+        inferredContext = 'Multicast group traffic; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
+        country = 'Reserved / Special Network';
+        countryCode = 'RES';
+        region = 'Special-Purpose Routing Range';
+        city = 'Reserved Range';
+        isp = 'IANA Special-Purpose';
+        asn = 'N/A (Special-Purpose)';
+        networkType = 'Reserved / Special-Purpose Subnet';
+        role = 'RESERVED';
+        roleLabel = 'Reserved / Special-Purpose';
+        observedEvidence = `Observed IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
+        inferredContext = 'Non-routable special-purpose network entity excluded from public geolocation lookups.';
+      }
+
       return sendJson(res, 200, {
         ip: cleanIP,
+        ipVersion,
+        classification,
         status: 'PRIVATE_IP',
+        lookupStatus: 'PRIVATE_IP',
         isPrivate: true,
-        error: 'Private/reserved non-routable IP address',
-        country: 'Private / Reserved Network',
-        countryCode: 'LAN',
-        city: 'Local Area Network',
+        geoAvailable: false,
+        error: 'Non-routable IP address excluded from public geolocation',
+        role,
+        roleLabel,
+        country,
+        countryCode,
+        region,
+        city,
         latitude: null,
         longitude: null,
-        isp: 'Private Infrastructure',
-        asn: 'N/A'
+        isp,
+        asn,
+        asnOrg: isp,
+        networkType,
+        provider: 'Internal Filter',
+        dataSource: 'INTERNAL_FILTER',
+        observedEvidence,
+        inferredContext
       });
     }
 
@@ -311,27 +422,62 @@ const server = http.createServer(async (req, res) => {
 
       if (resp.ok) {
         const live = await resp.json();
-        if (live && live.success !== false && live.country) {
+        if (live && live.success !== false && (live.country || live.latitude !== undefined)) {
+          const lat = typeof live.latitude === 'number' && live.latitude >= -90 && live.latitude <= 90 ? live.latitude : null;
+          const lon = typeof live.longitude === 'number' && live.longitude >= -180 && live.longitude <= 180 ? live.longitude : null;
+          const asnNum = live.connection?.asn ? `AS${live.connection.asn}` : 'Unknown ASN';
+          const org = live.connection?.org || live.connection?.isp || '';
+          const isp = live.connection?.isp || live.connection?.org || '';
+
           const geoRecord = {
             ip: cleanIP,
+            ipVersion,
+            classification,
             status: 'SUCCESS',
+            lookupStatus: 'SUCCESS',
+            isPrivate: false,
+            geoAvailable: true,
             country: live.country || 'Unknown Country',
             countryCode: live.country_code || live.countryCode || '',
             region: live.region || live.regionName || '',
             city: live.city || '',
-            latitude: typeof live.latitude === 'number' ? live.latitude : null,
-            longitude: typeof live.longitude === 'number' ? live.longitude : null,
+            latitude: lat,
+            longitude: lon,
             timezone: live.timezone?.id || live.timezone || '',
-            asn: live.connection?.asn ? `AS${live.connection.asn}` : 'Unknown ASN',
-            asnOrg: live.connection?.org || live.connection?.isp || '',
-            isp: live.connection?.isp || live.connection?.org || '',
+            asn: asnNum,
+            asnOrg: org,
+            isp: isp,
             networkType: 'Commercial Transit Network',
             riskLevel: 'LOW',
             isProxyOrVpn: false,
-            routingDetails: live.connection?.asn ? `BGP ASN: AS${live.connection.asn} (${live.connection.isp || ''})` : ''
+            provider: 'ipwho.is',
+            dataSource: 'LIVE FORENSIC TELEMETRY (Backend Gateway)',
+            isDemo: false,
+            routingDetails: live.connection?.asn ? `BGP ASN: AS${live.connection.asn} (${isp})` : ''
           };
           CACHE.set(cacheKey, geoRecord);
           return sendJson(res, 200, geoRecord);
+        } else if (live && live.success === false) {
+          const isRateLimit = live.message && live.message.toLowerCase().includes('rate');
+          return sendJson(res, 200, {
+            ip: cleanIP,
+            ipVersion,
+            classification,
+            status: 'UNAVAILABLE',
+            lookupStatus: isRateLimit ? 'RATE_LIMITED' : 'UNAVAILABLE',
+            error: live.message || 'Geolocation lookup rejected by upstream provider',
+            country: 'Geolocation unavailable',
+            countryCode: '',
+            region: '',
+            city: '',
+            latitude: null,
+            longitude: null,
+            isp: 'Intelligence unavailable',
+            asn: 'AS-UNKNOWN',
+            asnOrg: 'Autonomous System resolution offline',
+            provider: 'ipwho.is',
+            isDemo: false
+          });
         }
       }
     } catch {
@@ -351,15 +497,22 @@ const server = http.createServer(async (req, res) => {
         const live = await resp.json();
         if (live && live.status === 'success') {
           const asnParts = (live.as || '').split(' ');
+          const lat = typeof live.lat === 'number' && live.lat >= -90 && live.lat <= 90 ? live.lat : null;
+          const lon = typeof live.lon === 'number' && live.lon >= -180 && live.lon <= 180 ? live.lon : null;
           const geoRecord = {
             ip: cleanIP,
+            ipVersion,
+            classification,
             status: 'SUCCESS',
+            lookupStatus: 'SUCCESS',
+            isPrivate: false,
+            geoAvailable: true,
             country: live.country || 'Unknown Country',
             countryCode: live.countryCode || '',
             region: live.regionName || '',
             city: live.city || '',
-            latitude: typeof live.lat === 'number' ? live.lat : null,
-            longitude: typeof live.lon === 'number' ? live.lon : null,
+            latitude: lat,
+            longitude: lon,
             timezone: live.timezone || '',
             asn: asnParts[0] || 'Unknown ASN',
             asnOrg: live.org || live.isp || '',
@@ -367,6 +520,9 @@ const server = http.createServer(async (req, res) => {
             networkType: 'Commercial Transit Network',
             riskLevel: 'LOW',
             isProxyOrVpn: false,
+            provider: 'ip-api.com',
+            dataSource: 'LIVE FORENSIC TELEMETRY (Backend Gateway)',
+            isDemo: false,
             routingDetails: live.as ? `BGP: ${live.as}` : ''
           };
           CACHE.set(cacheKey, geoRecord);
@@ -380,7 +536,10 @@ const server = http.createServer(async (req, res) => {
     // Return explicit UNAVAILABLE on failure - NEVER fabricate coordinates
     return sendJson(res, 200, {
       ip: cleanIP,
+      ipVersion,
+      classification,
       status: 'UNAVAILABLE',
+      lookupStatus: 'UNAVAILABLE',
       error: 'Geolocation unavailable',
       country: 'Geolocation unavailable',
       countryCode: '',
@@ -390,7 +549,9 @@ const server = http.createServer(async (req, res) => {
       longitude: null,
       isp: 'Intelligence unavailable',
       asn: 'AS-UNKNOWN',
-      asnOrg: 'Autonomous System resolution offline'
+      asnOrg: 'Autonomous System resolution offline',
+      provider: 'None',
+      isDemo: false
     });
   }
 

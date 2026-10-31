@@ -251,10 +251,10 @@ function App() {
             recipient: emailInput.recipient || 'target@gov-organization.in',
             subject: emailInput.subject || 'Suspicious Email Ingress',
             date: emailInput.timestamp || new Date().toLocaleString(),
-            originatingIP: emailInput.ipOrigin ? emailInput.ipOrigin.split(' ')[0] : '185.220.101.45',
-            rawSnippet: `From: ${emailInput.sender}\nTo: ${emailInput.recipient}\nSubject: ${emailInput.subject}\nIP: ${emailInput.ipOrigin}`,
-            urls: ['http://internal-corp-portal.online/auth-portal/wire-release'],
-            ips: [emailInput.ipOrigin ? emailInput.ipOrigin.split(' ')[0] : '185.220.101.45'],
+            originatingIP: emailInput.ipOrigin ? emailInput.ipOrigin.split(' ')[0] : (emailInput.originatingIP || ''),
+            rawSnippet: `From: ${emailInput.sender}\nTo: ${emailInput.recipient}\nSubject: ${emailInput.subject}${emailInput.ipOrigin ? `\nIP: ${emailInput.ipOrigin}` : ''}`,
+            urls: emailInput.urls || ['http://internal-corp-portal.online/auth-portal/wire-release'],
+            ips: emailInput.ipOrigin ? [emailInput.ipOrigin.split(' ')[0]] : (emailInput.ips || []),
             attachments: [
               {
                 filename: 'Wire_Remittance_Directive.pdf.exe',
@@ -306,8 +306,10 @@ function App() {
       const geoList = await defaultGeoService.resolveAllIPs(networkIndicators);
       const geoInfo = geoList.find(g => g.role === 'SOURCE' && !g.isPrivate) || 
                       geoList.find(g => !g.isPrivate && g.status === 'SUCCESS') || 
+                      geoList.find(g => !g.isPrivate) || 
+                      (parsedEmail.originatingIP ? await resolveIPGeo(parsedEmail.originatingIP) : null) ||
                       geoList[0] || 
-                      await resolveIPGeo(parsedEmail.originatingIP || '185.220.101.45');
+                      null;
 
       // 5. Live Email Authentication & DNS Forensics
       let emailAuth = null;

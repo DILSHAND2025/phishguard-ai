@@ -602,7 +602,7 @@ export function generateForensicPdf(report) {
 
     let gY = curY + 36;
     if (!node) {
-      page.drawText('Private, internal RFC 1918, or direct localhost IP origin. No public ASN telemetry.', MARGIN + 14, gY, { font: 'F1', size: 8.5, color: COLORS.textMuted });
+      page.drawText('Non-routable, documentation range, or private IP origin. No public ASN telemetry.', MARGIN + 14, gY, { font: 'F1', size: 8.5, color: COLORS.textMuted });
     } else {
       const drawGeoRow = (l1, v1, l2, v2) => {
         page.drawText(l1, MARGIN + 14, gY, { font: 'F2', size: 8, color: COLORS.textMuted });
@@ -616,8 +616,10 @@ export function generateForensicPdf(report) {
 
       drawGeoRow('IP Address:', node.ip, 'Geographic Location:', `${node.city || 'Unknown'}, ${node.country || 'Unknown'}`);
       drawGeoRow('ASN Identifier:', node.asn, 'ASN Organization:', node.asnOrg);
-      drawGeoRow('Network Type:', node.networkType, 'Proxy / VPN Egress:', node.isProxyOrVpn ? 'YES (ANONYMIZED)' : 'NO (DIRECT)');
-      drawGeoRow('Coordinates:', node.lat ? `${node.lat}, ${node.lon}` : 'N/A', 'Topology Role:', node.role || 'ORIGINATING HOP');
+      const coordStr = (typeof node.latitude === 'number' && typeof node.longitude === 'number')
+        ? `${node.latitude.toFixed(4)}, ${node.longitude.toFixed(4)}`
+        : (node.lat ? `${node.lat}, ${node.lon}` : 'N/A');
+      drawGeoRow('Coordinates:', coordStr, 'Topology Role:', node.role || 'ORIGINATING HOP');
     }
 
     // Legal disclaimer callout

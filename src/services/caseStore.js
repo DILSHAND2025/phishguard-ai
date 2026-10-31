@@ -13,8 +13,95 @@
 import { getApiBaseUrl } from './apiConfig.js';
 import { getThreatPriority, getPriorityStyle } from './priorityHelper.js';
 import { generateCaseId } from './forensicReportService.js';
+import { classifyIP, IP_CLASSIFICATION } from './emailParser.js';
 
 export { getThreatPriority, getPriorityStyle, generateCaseId };
+
+/**
+ * Normalizes case geoIntelligence so that legacy/cached cases accurately reflect
+ * RFC 5737 / RFC 3849 documentation and reserved taxonomy instead of generic PRIVATE.
+ */
+export function normalizeCaseGeoIntelligence(caseItem) {
+  if (!caseItem || !caseItem.geoIntelligence) return caseItem;
+
+  const sanitize = (r) => {
+    if (!r || !r.ip) return r;
+    const cls = classifyIP(r.ip);
+    if (cls === IP_CLASSIFICATION.TEST_NET_IP) {
+      return {
+        ...r,
+        classification: IP_CLASSIFICATION.TEST_NET_IP,
+        role: 'RESERVED / TEST-NET',
+        roleLabel: 'Documentation / TEST-NET (RFC 5737)',
+        status: 'PRIVATE_IP',
+        lookupStatus: 'PRIVATE_IP',
+        isPrivate: true,
+        geoAvailable: false,
+        country: 'Documentation / Test Network',
+        countryCode: 'TEST',
+        region: 'RFC 5737 / RFC 3849 Benchmark & Documentation Range',
+        city: 'Reserved Test-Net Subnet',
+        isp: 'IANA Special-Purpose (Documentation)',
+        asn: 'N/A (Documentation Subnet)',
+        asnOrg: 'IANA Special-Purpose (Documentation)',
+        networkType: 'Documentation / TEST-NET Subnet (RFC 5737)',
+        observedEvidence: `IP ${r.ip} belongs to documentation/example address space (${cls} - RFC 5737 / RFC 3849).`,
+        inferredContext: 'Non-routable documentation address used in test scenarios or documentation; excluded from public geolocation.'
+      };
+    } else if (cls === IP_CLASSIFICATION.LOOPBACK_IP) {
+      return {
+        ...r,
+        classification: IP_CLASSIFICATION.LOOPBACK_IP,
+        role: 'LOOPBACK',
+        roleLabel: 'Loopback Address',
+        status: 'PRIVATE_IP',
+        lookupStatus: 'PRIVATE_IP',
+        isPrivate: true,
+        geoAvailable: false,
+        country: 'Loopback / Host-Local Network',
+        countryCode: 'LOK',
+        region: 'Local Host System Interface',
+        city: 'Localhost (Loopback)',
+        isp: 'Host Software Loopback',
+        asn: 'N/A (Loopback Interface)',
+        networkType: 'Host-Local Loopback (RFC 1122)'
+      };
+    } else if (cls === IP_CLASSIFICATION.LINK_LOCAL_IP) {
+      return {
+        ...r,
+        classification: IP_CLASSIFICATION.LINK_LOCAL_IP,
+        role: 'LINK_LOCAL',
+        roleLabel: 'Link-Local Address (RFC 3927)',
+        status: 'PRIVATE_IP',
+        lookupStatus: 'PRIVATE_IP',
+        isPrivate: true,
+        geoAvailable: false,
+        country: 'Link-Local Network',
+        countryCode: 'LL',
+        region: 'Auto-Configured Segment',
+        city: 'Link-Local Subnet',
+        isp: 'Link-Local Infrastructure',
+        asn: 'N/A (Link-Local)',
+        networkType: 'Link-Local Subnet (RFC 3927)'
+      };
+    }
+    return r;
+  };
+
+  const newGeoInfo = sanitize(caseItem.geoIntelligence.geoInfo);
+  const newGeoList = Array.isArray(caseItem.geoIntelligence.geoList)
+    ? caseItem.geoIntelligence.geoList.map(sanitize)
+    : [];
+
+  return {
+    ...caseItem,
+    geoIntelligence: {
+      ...caseItem.geoIntelligence,
+      geoInfo: newGeoInfo,
+      geoList: newGeoList
+    }
+  };
+}
 
 /**
  * Fetches stored email cases from PostgreSQL backend with filtering & pagination
@@ -103,7 +190,7 @@ export async function fetchCases({
       const pageHeader = res.headers.get('X-Page');
       const totalPagesHeader = res.headers.get('X-Total-Pages');
       return {
-        cases: data,
+        cases: data.map(normalizeCaseGeoIntelligence),
         total: totalHeader ? parseInt(totalHeader, 10) : data.length,
         page: pageHeader ? parseInt(pageHeader, 10) : page,
         limit,
@@ -113,7 +200,7 @@ export async function fetchCases({
     }
 
     return {
-      cases: data.cases || [],
+      cases: (data.cases || []).map(normalizeCaseGeoIntelligence),
       total: data.total || (data.cases ? data.cases.length : 0),
       page: data.page || page,
       limit: data.limit || limit,
@@ -156,7 +243,8 @@ export async function fetchCaseById(caseId) {
       throw new Error(`HTTP ${res.status}`);
     }
 
-    return await res.json();
+    const item = await res.json();
+    return normalizeCaseGeoIntelligence(item);
   } catch (err) {
     console.warn(`[MAVERICK CaseStore] fetchCaseById(${caseId}) failed:`, err.message);
     return null;
