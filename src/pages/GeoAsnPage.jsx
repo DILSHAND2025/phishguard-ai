@@ -13,11 +13,14 @@ import { GEO_LEGAL_DISCLAIMER } from '../services/geoAsnService';
 import { ForensicGeoMap } from '../components/dashboard/ForensicGeoMap';
 
 export const GeoAsnPage = ({ onViewChange, currentAnalysis }) => {
+  const geoIntelligence = currentAnalysis?.geoIntelligence || {};
   const geoRecordsForMap = (Array.isArray(currentAnalysis?.geoList) && currentAnalysis.geoList.length > 0)
     ? currentAnalysis.geoList
-    : (currentAnalysis?.geoInfo ? [currentAnalysis.geoInfo] : []);
+    : (Array.isArray(geoIntelligence.geoList) && geoIntelligence.geoList.length > 0)
+      ? geoIntelligence.geoList
+      : (currentAnalysis?.geoInfo ? [currentAnalysis.geoInfo] : (geoIntelligence.geoInfo ? [geoIntelligence.geoInfo] : []));
 
-  const geoInfo = currentAnalysis?.geoInfo || geoRecordsForMap.find(g => !g.isPrivate) || geoRecordsForMap[0] || null;
+  const geoInfo = currentAnalysis?.geoInfo || geoIntelligence.geoInfo || geoRecordsForMap.find(g => !g.isPrivate) || geoRecordsForMap[0] || null;
   const originIP = currentAnalysis?.email?.originatingIP || geoInfo?.ip || 'None Observed';
 
   const infrastructureList = geoRecordsForMap.length > 0 ? geoRecordsForMap : (geoInfo ? [geoInfo] : []);

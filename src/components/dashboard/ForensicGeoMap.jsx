@@ -62,7 +62,19 @@ export const ForensicGeoMap = ({
 
   // Prepare display records directly from email forensic telemetry (never inject user client IP)
   const displayRecords = React.useMemo(() => {
-    return (Array.isArray(geoRecords) ? geoRecords : []).filter(Boolean);
+    const raw = Array.isArray(geoRecords) ? geoRecords : (geoRecords ? [geoRecords] : []);
+    return raw.filter(Boolean).map(r => {
+      const rawLat = r.latitude ?? r.lat;
+      const rawLng = r.longitude ?? r.lon ?? r.lng;
+      const lat = typeof rawLat === 'number' ? rawLat : (rawLat !== null && rawLat !== undefined && rawLat !== '' ? parseFloat(rawLat) : null);
+      const lng = typeof rawLng === 'number' ? rawLng : (rawLng !== null && rawLng !== undefined && rawLng !== '' ? parseFloat(rawLng) : null);
+      const hasValidCoords = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+      return {
+        ...r,
+        latitude: hasValidCoords ? lat : (r.latitude ?? null),
+        longitude: hasValidCoords ? lng : (r.longitude ?? null)
+      };
+    });
   }, [geoRecords]);
 
   // Filter records that have valid numeric coordinates within valid geographic bounds [-90, 90] & [-180, 180]
@@ -73,6 +85,8 @@ export const ForensicGeoMap = ({
            typeof r.longitude === 'number' && 
            !isNaN(r.latitude) && 
            !isNaN(r.longitude) &&
+           isFinite(r.latitude) &&
+           isFinite(r.longitude) &&
            r.latitude >= -90 && r.latitude <= 90 &&
            r.longitude >= -180 && r.longitude <= 180
     );
@@ -453,16 +467,48 @@ export const ForensicGeoMap = ({
                       )}
 
                       {/* Source attribution tag */}
-                      <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[9px]">
-                        <span className={rec.isDemo ? 'text-amber-600 font-medium' : 'text-emerald-600 font-medium'}>
-                          {rec.isDemo ? 'DEMO DATA' : hasCoords ? 'LIVE TELEMETRY' : (rec.status || 'UNRESOLVED')}
-                        </span>
-                        {hasCoords && (
-                          <span className="text-slate-600 hover:text-slate-900 hover:underline flex items-center gap-0.5 font-medium">
-                            <Crosshair className="w-2.5 h-2.5" /> Focus
-                          </span>
-                        )}
-                      </div>
+                      {(() => {
+                        const displayStatus = rec.isDemo 
+                          ? 'DEMO DATA' 
+                          : hasCoords 
+                            ? 'LIVE TELEMETRY' 
+                            : isTestNet 
+                              ? 'RESERVED / TEST-NET' 
+                              : isLoopback 
+                                ? 'LOOPBACK' 
+                                : isLinkLocal 
+                                  ? 'LINK_LOCAL' 
+                                  : isCGNAT 
+                                    ? 'CGNAT' 
+                                    : isMulticast 
+                                      ? 'MULTICAST' 
+                                      : isReserved 
+                                        ? 'RESERVED' 
+                                        : isPrivate 
+                                          ? 'PRIVATE_IP' 
+                                          : (rec.status === 'RESERVED_TEST_NET' ? 'RESERVED / TEST-NET' : (rec.status || 'UNRESOLVED'));
+
+                        const statusColor = rec.isDemo
+                          ? 'text-amber-600 font-medium'
+                          : hasCoords
+                            ? 'text-emerald-600 font-medium'
+                            : isTestNet
+                              ? 'text-amber-700 font-medium'
+                              : 'text-slate-500 font-medium';
+
+                        return (
+                          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[9px]">
+                            <span className={statusColor}>
+                              {displayStatus}
+                            </span>
+                            {hasCoords && (
+                              <span className="text-slate-600 hover:text-slate-900 hover:underline flex items-center gap-0.5 font-medium">
+                                <Crosshair className="w-2.5 h-2.5" /> Focus
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })

@@ -34,7 +34,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const host = (req.headers && req.headers.host) || 'localhost';
+    const reqUrl = new URL(req.url || '/', `http://${host}`);
     const ip = (req.query && req.query.ip) || reqUrl.searchParams.get('ip') || '';
     const cleanIP = cleanIPString(ip);
 
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
       let observedEvidence = `Observed IP ${cleanIP} belongs to private ip intranet address space (RFC 1918).`;
       let inferredContext = 'Internal non-routable corporate hop excluded from public geolocation lookups.';
 
+      let nonRoutableStatus = 'PRIVATE_IP';
       if (classification === IP_CLASSIFICATION.TEST_NET_IP) {
         country = 'Documentation / Test Network';
         countryCode = 'TEST';
@@ -82,6 +84,7 @@ export default async function handler(req, res) {
         networkType = 'Documentation / TEST-NET Subnet (RFC 5737)';
         role = 'RESERVED / TEST-NET';
         roleLabel = 'Documentation / TEST-NET (RFC 5737)';
+        nonRoutableStatus = 'RESERVED_TEST_NET';
         observedEvidence = `Observed IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
         inferredContext = 'Non-routable documentation address; excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
@@ -94,6 +97,7 @@ export default async function handler(req, res) {
         networkType = 'Host-Local Loopback (RFC 1122)';
         role = 'LOOPBACK';
         roleLabel = 'Loopback Address';
+        nonRoutableStatus = 'LOOPBACK';
         observedEvidence = `Observed IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
         inferredContext = 'Host-internal loopback address; excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
@@ -106,6 +110,7 @@ export default async function handler(req, res) {
         networkType = 'Link-Local Subnet (RFC 3927)';
         role = 'LINK_LOCAL';
         roleLabel = 'Link-Local Address (RFC 3927)';
+        nonRoutableStatus = 'LINK_LOCAL';
         observedEvidence = `Observed IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
         inferredContext = 'Non-routable link-local segment hop excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.CGNAT) {
@@ -118,6 +123,7 @@ export default async function handler(req, res) {
         networkType = 'Carrier-Grade NAT Subnet (RFC 6598)';
         role = 'CGNAT';
         roleLabel = 'Carrier-Grade NAT (RFC 6598)';
+        nonRoutableStatus = 'CGNAT';
         observedEvidence = `Observed IP ${cleanIP} belongs to Carrier-Grade NAT address space (RFC 6598).`;
         inferredContext = 'Shared address space; excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.MULTICAST) {
@@ -130,6 +136,7 @@ export default async function handler(req, res) {
         networkType = 'Multicast Subnet (RFC 5771)';
         role = 'MULTICAST';
         roleLabel = 'Multicast Address (RFC 5771)';
+        nonRoutableStatus = 'MULTICAST';
         observedEvidence = `Observed IP ${cleanIP} is a multicast address (RFC 5771 / RFC 4291).`;
         inferredContext = 'Multicast group traffic; excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
@@ -142,6 +149,7 @@ export default async function handler(req, res) {
         networkType = 'Reserved / Special-Purpose Subnet';
         role = 'RESERVED';
         roleLabel = 'Reserved / Special-Purpose';
+        nonRoutableStatus = 'RESERVED';
         observedEvidence = `Observed IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
         inferredContext = 'Non-routable special-purpose network entity excluded from public geolocation lookups.';
       }
@@ -150,8 +158,8 @@ export default async function handler(req, res) {
         ip: cleanIP,
         ipVersion,
         classification,
-        status: 'PRIVATE_IP',
-        lookupStatus: 'PRIVATE_IP',
+        status: nonRoutableStatus,
+        lookupStatus: nonRoutableStatus,
         isPrivate: true,
         geoAvailable: false,
         role,
@@ -194,8 +202,10 @@ export default async function handler(req, res) {
       if (upstreamRes.ok) {
         const live = await upstreamRes.json();
         if (live && live.success !== false && (live.country || live.latitude !== undefined)) {
-          const lat = typeof live.latitude === 'number' && live.latitude >= -90 && live.latitude <= 90 ? live.latitude : null;
-          const lon = typeof live.longitude === 'number' && live.longitude >= -180 && live.longitude <= 180 ? live.longitude : null;
+          const rawLat = typeof live.latitude === 'number' ? live.latitude : parseFloat(live.latitude);
+          const rawLon = typeof live.longitude === 'number' ? live.longitude : parseFloat(live.longitude);
+          const lat = typeof rawLat === 'number' && !isNaN(rawLat) && rawLat >= -90 && rawLat <= 90 ? rawLat : null;
+          const lon = typeof rawLon === 'number' && !isNaN(rawLon) && rawLon >= -180 && rawLon <= 180 ? rawLon : null;
           const asnNum = live.connection?.asn ? `AS${live.connection.asn}` : 'Unknown ASN';
           const org = live.connection?.org || live.connection?.isp || '';
           const isp = live.connection?.isp || live.connection?.org || '';
@@ -216,6 +226,7 @@ export default async function handler(req, res) {
             longitude: lon,
             timezone: live.timezone?.id || live.timezone || '',
             asn: asnNum,
+            ASN: asnNum,
             asnOrg: org,
             isp: isp,
             networkType: 'Commercial Transit Network',

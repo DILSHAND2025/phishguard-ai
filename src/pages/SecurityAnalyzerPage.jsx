@@ -220,10 +220,22 @@ export const SecurityAnalyzerPage = ({
     return true;
   });
 
+  // Geo intelligence fallback resolution (supports live analysis & loaded cases)
+  const geoIntelligence = currentAnalysis?.geoIntelligence || caseItem?.geoIntelligence || {};
+  const effectiveGeoList = (Array.isArray(geoList) && geoList.length > 0)
+    ? geoList
+    : (Array.isArray(geoIntelligence.geoList) && geoIntelligence.geoList.length > 0)
+      ? geoIntelligence.geoList
+      : geoInfo
+        ? [geoInfo]
+        : (geoIntelligence.geoInfo ? [geoIntelligence.geoInfo] : []);
+
+  const effectiveGeoInfo = geoInfo || geoIntelligence.geoInfo || effectiveGeoList.find(g => !g.isPrivate) || effectiveGeoList[0] || null;
+
   // Active GeoIP record for details column
-  const activeGeoRecord = (selectedGeoIP && (Array.isArray(geoList) ? geoList : []).find(g => g && g.ip === selectedGeoIP)) 
-    || geoInfo 
-    || (Array.isArray(geoList) && geoList.length > 0 ? (geoList.find(Boolean) || null) : null);
+  const activeGeoRecord = (selectedGeoIP && effectiveGeoList.find(g => g && g.ip === selectedGeoIP)) 
+    || effectiveGeoInfo 
+    || (effectiveGeoList.length > 0 ? (effectiveGeoList.find(Boolean) || null) : null);
 
   return (
     <div className="space-y-6 pb-20 font-sans text-slate-900">
@@ -880,7 +892,7 @@ export const SecurityAnalyzerPage = ({
       ======================================================== */}
       <div>
         <ForensicGeoMap 
-          geoRecords={geoList.length > 0 ? geoList : geoInfo ? [geoInfo] : []}
+          geoRecords={effectiveGeoList}
           title="Network Intelligence"
           subtitle="Geospatial routing and autonomous system infrastructure mapping"
           onSelectIP={setSelectedGeoIP}

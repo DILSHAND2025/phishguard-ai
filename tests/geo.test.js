@@ -51,6 +51,36 @@ import {
 import { calculateEvidenceFusion, DEFAULT_FUSION_WEIGHTS } from '../src/services/evidenceFusion.js';
 import { getExplainableDiagnosticChecks } from '../src/services/diagnosticHelper.js';
 import { normalizeCaseGeoIntelligence } from '../src/services/caseStore.js';
+import geoipHandler from '../api/geoip.js';
+
+function mockReqRes(ip) {
+  const req = { 
+    method: 'GET', 
+    url: `/api/geoip?ip=${encodeURIComponent(ip)}`, 
+    query: { ip },
+    headers: { host: 'localhost' }
+  };
+  let statusCode = 200;
+  const headers = {};
+  let body = null;
+  const res = {
+    writeHead(status, hdrs) { 
+      statusCode = status; 
+      if (hdrs) Object.assign(headers, hdrs); 
+      return res;
+    },
+    setHeader(k, v) { headers[k] = v; return res; },
+    status(status) { statusCode = status; return res; },
+    json(data) { body = data; return res; },
+    end(data) { 
+      if (data && typeof data === 'string') {
+        try { body = JSON.parse(data); } catch { body = data; }
+      }
+      return res;
+    }
+  };
+  return { req, res, getResult: () => ({ statusCode, headers, body }) };
+}
 
 test('MAVERICK Forensic IP GeoLocation Test Suite', async (t) => {
 
@@ -597,6 +627,8 @@ Test message containing documentation test IP.`;
     const resolvedTestNet = await defaultGeoService.resolveIP(ind.ip, ind);
     assert.equal(resolvedTestNet.role, 'RESERVED / TEST-NET');
     assert.equal(resolvedTestNet.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(resolvedTestNet.status, 'RESERVED_TEST_NET');
+    assert.notEqual(resolvedTestNet.status, 'PRIVATE_IP', 'Must NOT have status PRIVATE_IP');
     assert.equal(resolvedTestNet.networkType, 'Documentation / TEST-NET Subnet (RFC 5737)');
     assert.equal(resolvedTestNet.latitude, null);
     assert.equal(resolvedTestNet.longitude, null);
@@ -621,6 +653,8 @@ Test message containing documentation test IP.`;
     const sanitizedCase = normalizeCaseGeoIntelligence(legacyCase);
     assert.equal(sanitizedCase.geoIntelligence.geoInfo.role, 'RESERVED / TEST-NET');
     assert.equal(sanitizedCase.geoIntelligence.geoInfo.classification, IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(sanitizedCase.geoIntelligence.geoInfo.status, 'RESERVED_TEST_NET');
+    assert.notEqual(sanitizedCase.geoIntelligence.geoInfo.status, 'PRIVATE_IP');
     assert.equal(sanitizedCase.geoIntelligence.geoList[0].role, 'RESERVED / TEST-NET');
   });
 
@@ -650,12 +684,149 @@ Google DNS service notice.`;
     assert.equal(geo.ipVersion, 'IPv4');
     assert.equal(geo.isPrivate, false);
     assert.equal(geo.geoAvailable, true);
+    assert.equal(geo.status, 'SUCCESS');
     assert.equal(geo.country, 'United States');
     assert.ok(typeof geo.latitude === 'number');
     assert.ok(typeof geo.longitude === 'number');
     assert.ok(geo.latitude >= -90 && geo.latitude <= 90);
     assert.ok(geo.longitude >= -180 && geo.longitude <= 180);
     assert.ok(geo.asn.includes('15169') || geo.asnOrg.includes('Google'));
+  });
+
+  // Case 19: End-to-end Dashboard Network Intelligence & Geolocation Pipeline
+  await t.test('19. Dashboard Pipeline: Public IP 8.8.8.8 successful GeoIP lookup and map marker qualification', async () => {
+    // 1. Backend /api/geoip handler verification
+    const mock = mockReqRes('8.8.8.8');
+    await geoipHandler(mock.req, mock.res);
+    const apiRes = mock.getResult();
+    assert.equal(apiRes.statusCode, 200);
+    assert.equal(apiRes.body.ip, '8.8.8.8');
+    assert.equal(apiRes.body.status, 'SUCCESS');
+    assert.equal(apiRes.body.geoAvailable, true);
+    assert.equal(apiRes.body.classification, 'Public IPv4');
+    assert.equal(apiRes.body.country, 'United States');
+    assert.equal(typeof apiRes.body.latitude, 'number');
+    assert.equal(typeof apiRes.body.longitude, 'number');
+    assert.ok(apiRes.body.latitude >= -90 && apiRes.body.latitude <= 90);
+    assert.ok(apiRes.body.longitude >= -180 && apiRes.body.longitude <= 180);
+    assert.ok(apiRes.body.asn && apiRes.body.asn.includes('15169'));
+    assert.ok(apiRes.body.isp);
+
+    // 2. defaultGeoService resolution and dashboard state mapping
+    const resolved = await defaultGeoService.resolveIP('8.8.8.8', { role: 'SOURCE', preferLive: true });
+    assert.equal(resolved.status, 'SUCCESS');
+    assert.equal(resolved.classification, 'Public IPv4');
+    assert.equal(resolved.geoAvailable, true);
+    assert.equal(typeof resolved.latitude, 'number');
+    assert.equal(typeof resolved.longitude, 'number');
+    assert.ok(resolved.latitude >= -90 && resolved.latitude <= 90);
+    assert.ok(resolved.longitude >= -180 && resolved.longitude <= 180);
+    assert.ok(resolved.asn && resolved.asn !== 'AS-UNKNOWN');
+    assert.ok(resolved.isp && resolved.isp !== 'Unknown ISP');
+
+    // 3. ForensicGeoMap marker qualification from coordinates
+    const geoList = [resolved];
+    const markerPoints = geoList.filter(r => 
+      typeof r.latitude === 'number' && typeof r.longitude === 'number' &&
+      !isNaN(r.latitude) && !isNaN(r.longitude) &&
+      r.latitude >= -90 && r.latitude <= 90 &&
+      r.longitude >= -180 && r.longitude <= 180
+    );
+    assert.equal(markerPoints.length, 1, 'Public IP 8.8.8.8 produces 1 map marker');
+    assert.equal(markerPoints[0].ip, '8.8.8.8');
+  });
+
+  await t.test('19. Dashboard Pipeline: Private IP 192.168.1.10 triggers NO GeoIP lookup and no marker', async () => {
+    assert.equal(isPublicIP('192.168.1.10'), false);
+    assert.equal(classifyIP('192.168.1.10'), IP_CLASSIFICATION.PRIVATE_IP);
+
+    let providerCalled = false;
+    class SpyProvider extends BaseGeoProvider {
+      constructor() { super('Spy Provider'); }
+      async lookup() {
+        providerCalled = true;
+        throw new Error('Public GeoIP lookup must NOT be called for RFC 1918 private IP!');
+      }
+    }
+
+    const testGeoService = new GeoLocationService({ providers: [new SpyProvider()] });
+    const resolved = await testGeoService.resolveIP('192.168.1.10');
+
+    assert.equal(providerCalled, false, 'External GeoIP lookup was never triggered');
+    assert.equal(resolved.status, 'PRIVATE_IP');
+    assert.equal(resolved.geoAvailable, false);
+    assert.equal(resolved.isPrivate, true);
+    assert.equal(resolved.latitude, null);
+    assert.equal(resolved.longitude, null);
+
+    // Map marker qualification: No marker produced
+    const markerPoints = [resolved].filter(r => typeof r.latitude === 'number' && typeof r.longitude === 'number');
+    assert.equal(markerPoints.length, 0, 'Private IP produces 0 map markers');
+  });
+
+  await t.test('19. Dashboard Pipeline: TEST-NET IP 198.51.100.24 is RESERVED / TEST-NET, NOT PRIVATE_IP, and has no marker', async () => {
+    assert.equal(classifyIP('198.51.100.24'), IP_CLASSIFICATION.TEST_NET_IP);
+    assert.equal(isPublicIP('198.51.100.24'), false);
+
+    // 1. Backend /api/geoip handler verification
+    const mock = mockReqRes('198.51.100.24');
+    await geoipHandler(mock.req, mock.res);
+    const apiRes = mock.getResult();
+    assert.equal(apiRes.statusCode, 200);
+    assert.equal(apiRes.body.status, 'RESERVED_TEST_NET');
+    assert.notEqual(apiRes.body.status, 'PRIVATE_IP', 'API status must NOT be PRIVATE_IP');
+    assert.equal(apiRes.body.role, 'RESERVED / TEST-NET');
+    assert.notEqual(apiRes.body.role, 'PRIVATE');
+    assert.equal(apiRes.body.geoAvailable, false);
+    assert.equal(apiRes.body.latitude, null);
+    assert.equal(apiRes.body.longitude, null);
+
+    // 2. Service resolution
+    const resolved = await defaultGeoService.resolveIP('198.51.100.24');
+    assert.equal(resolved.role, 'RESERVED / TEST-NET');
+    assert.notEqual(resolved.role, 'PRIVATE');
+    assert.equal(resolved.status, 'RESERVED_TEST_NET');
+    assert.notEqual(resolved.status, 'PRIVATE_IP', 'Service resolution status must NOT be PRIVATE_IP');
+    assert.equal(resolved.lookupStatus, 'RESERVED_TEST_NET');
+    assert.notEqual(resolved.lookupStatus, 'PRIVATE_IP');
+    assert.equal(resolved.geoAvailable, false);
+    assert.equal(resolved.latitude, null);
+    assert.equal(resolved.longitude, null);
+
+    // 3. Map marker qualification: No marker produced
+    const markerPoints = [resolved].filter(r => typeof r.latitude === 'number' && typeof r.longitude === 'number');
+    assert.equal(markerPoints.length, 0, 'TEST-NET IP produces 0 map markers');
+  });
+
+  await t.test('19. Dashboard Pipeline: API failure returns clear error state without crashing', async () => {
+    class FailingProvider extends BaseGeoProvider {
+      constructor() { super('Failing Provider'); }
+      async lookup() { throw new Error('Simulated upstream GeoIP API outage (HTTP 503)'); }
+    }
+
+    const failingService = new GeoLocationService({ providers: [new FailingProvider()] });
+    
+    // Must resolve cleanly without throwing
+    let errorThrown = false;
+    let resolved = null;
+    try {
+      resolved = await failingService.resolveIP('8.8.4.4');
+    } catch {
+      errorThrown = true;
+    }
+
+    assert.equal(errorThrown, false, 'Service handled API failure without crashing');
+    assert.ok(resolved !== null);
+    assert.equal(resolved.status, 'UNAVAILABLE');
+    assert.equal(resolved.geoAvailable, false);
+    assert.equal(resolved.country, 'Geolocation unavailable');
+    assert.equal(resolved.latitude, null);
+    assert.equal(resolved.longitude, null);
+    assert.ok(resolved.error.includes('HTTP 503') || resolved.error.includes('unavailable'));
+
+    // Map marker qualification: No marker produced, triggers Geolocation Unavailable overlay cleanly
+    const markerPoints = [resolved].filter(r => typeof r.latitude === 'number' && typeof r.longitude === 'number');
+    assert.equal(markerPoints.length, 0, 'Failed API returns 0 map markers');
   });
 
 });

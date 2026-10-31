@@ -30,9 +30,11 @@ const IN_MEMORY_GEO_CACHE = new Map();
  * Validate numeric coordinate bounds
  */
 export function sanitizeCoordinate(val, min, max) {
-  if (typeof val !== 'number' || isNaN(val)) return null;
-  if (val < min || val > max) return null;
-  return val;
+  if (val === null || val === undefined || val === '') return null;
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  if (typeof num !== 'number' || isNaN(num) || !isFinite(num)) return null;
+  if (num < min || num > max) return null;
+  return num;
 }
 
 /**
@@ -59,17 +61,25 @@ export class BackendGeoProvider extends BaseGeoProvider {
   }
 
   async lookup(ip) {
-    const isLocalHost = typeof window !== 'undefined' && 
+    if (!ip || !isPublicIP(ip)) return null;
+
+    const isBrowser = typeof window !== 'undefined';
+    const isLocalHost = isBrowser && 
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-    const endpoints = [
+    // Priority 1: In browser, call same-origin /api/geoip?ip=... directly (Vercel serverless / Vite proxy)
+    // Priority 2: Configured baseUrl (e.g. Render backend)
+    // Priority 3: Local development servers if on localhost
+    const candidateEndpoints = [
+      isBrowser ? `/api/geoip?ip=${encodeURIComponent(ip)}` : '',
       this.baseUrl ? `${this.baseUrl}/api/geoip?ip=${encodeURIComponent(ip)}` : '',
-      `/api/geoip?ip=${encodeURIComponent(ip)}`,
       ...(isLocalHost ? [
         `http://localhost:5000/api/geoip?ip=${encodeURIComponent(ip)}`,
         `http://127.0.0.1:5000/api/geoip?ip=${encodeURIComponent(ip)}`
       ] : [])
     ].filter(Boolean);
+
+    const endpoints = Array.from(new Set(candidateEndpoints));
 
     for (const endpoint of endpoints) {
       try {
@@ -85,13 +95,19 @@ export class BackendGeoProvider extends BaseGeoProvider {
 
         if (res.ok) {
           const data = await res.json();
-          if (data && (data.status === 'SUCCESS' || data.status === 'success' || data.countryCode || data.country)) {
+          if (data && (data.status === 'SUCCESS' || data.status === 'success' || data.countryCode || data.country || data.latitude !== undefined)) {
             const lat = sanitizeCoordinate(data.latitude, -90, 90);
             const lon = sanitizeCoordinate(data.longitude, -180, 180);
             return {
               ...data,
               latitude: lat,
               longitude: lon,
+              geoAvailable: typeof data.geoAvailable === 'boolean' ? data.geoAvailable : (lat !== null && lon !== null),
+              status: data.status || 'SUCCESS',
+              lookupStatus: data.lookupStatus || data.status || 'SUCCESS',
+              classification: data.classification || (isValidIPv6(ip) ? 'Public IPv6' : 'Public IPv4'),
+              asn: data.asn || data.ASN || (data.connection?.asn ? (String(data.connection.asn).startsWith('AS') ? String(data.connection.asn) : `AS${data.connection.asn}`) : 'AS-UNKNOWN'),
+              isp: data.isp || data.asnOrg || data.connection?.isp || data.connection?.org || 'Unknown ISP',
               dataSource: 'LIVE FORENSIC TELEMETRY (Backend Gateway)',
               provider: data.provider || 'MAVERICK Backend Gateway',
               isDemo: false
@@ -116,6 +132,7 @@ export class DirectIpWhoIsProvider extends BaseGeoProvider {
   }
 
   async lookup(ip) {
+    if (!ip || !isPublicIP(ip)) return null;
     if (typeof fetch === 'undefined') return null;
 
     try {
@@ -392,6 +409,7 @@ export class GeoLocationService {
       let networkType = 'Private Intranet (RFC 1918)';
       let computedRole = 'PRIVATE';
       let computedRoleLabel = 'Private Intranet (RFC 1918)';
+      let nonRoutableStatus = 'PRIVATE_IP';
       let observedEvidence = `IP ${cleanIP} belongs to private ip intranet address space (RFC 1918 / RFC 4193).`;
       let inferredContext = 'Internal non-routable corporate hop; excluded from public geolocation lookups.';
 
@@ -405,6 +423,7 @@ export class GeoLocationService {
         networkType = 'Documentation / TEST-NET Subnet (RFC 5737)';
         computedRole = 'RESERVED / TEST-NET';
         computedRoleLabel = 'Documentation / TEST-NET (RFC 5737)';
+        nonRoutableStatus = 'RESERVED_TEST_NET';
         observedEvidence = `IP ${cleanIP} belongs to documentation/example address space (${classification} - RFC 5737 / RFC 3849).`;
         inferredContext = 'Non-routable documentation address used in test scenarios or documentation; excluded from public geolocation.';
       } else if (classification === IP_CLASSIFICATION.LOOPBACK_IP) {
@@ -417,6 +436,7 @@ export class GeoLocationService {
         networkType = 'Host-Local Loopback (RFC 1122)';
         computedRole = 'LOOPBACK';
         computedRoleLabel = 'Loopback Address';
+        nonRoutableStatus = 'PRIVATE_IP';
         observedEvidence = `IP ${cleanIP} is a loopback interface address (RFC 1122 / RFC 4291).`;
         inferredContext = 'Host-internal loopback address; excluded from public network geolocation.';
       } else if (classification === IP_CLASSIFICATION.LINK_LOCAL_IP) {
@@ -429,8 +449,35 @@ export class GeoLocationService {
         networkType = 'Link-Local Subnet (RFC 3927)';
         computedRole = 'LINK_LOCAL';
         computedRoleLabel = 'Link-Local Address (RFC 3927)';
+        nonRoutableStatus = 'PRIVATE_IP';
         observedEvidence = `IP ${cleanIP} is an autoconfigured link-local address (RFC 3927 / RFC 4291).`;
         inferredContext = 'Non-routable link-local segment hop; excluded from public geolocation.';
+      } else if (classification === IP_CLASSIFICATION.CGNAT) {
+        country = 'Carrier-Grade NAT Network';
+        countryCode = 'CGN';
+        region = 'Shared Address Space';
+        city = 'CGNAT Pool (RFC 6598)';
+        isp = 'Carrier-Grade NAT';
+        asn = 'N/A (CGNAT)';
+        networkType = 'Carrier-Grade NAT Subnet (RFC 6598)';
+        computedRole = 'CGNAT';
+        computedRoleLabel = 'Carrier-Grade NAT (RFC 6598)';
+        nonRoutableStatus = 'PRIVATE_IP';
+        observedEvidence = `Observed IP ${cleanIP} belongs to Carrier-Grade NAT address space (RFC 6598).`;
+        inferredContext = 'Shared address space; excluded from public geolocation lookups.';
+      } else if (classification === IP_CLASSIFICATION.MULTICAST) {
+        country = 'Multicast Network';
+        countryCode = 'MC';
+        region = 'Multicast Range';
+        city = 'Multicast Group';
+        isp = 'Multicast Group (RFC 5771)';
+        asn = 'N/A (Multicast)';
+        networkType = 'Multicast Subnet (RFC 5771)';
+        computedRole = 'MULTICAST';
+        computedRoleLabel = 'Multicast Address (RFC 5771)';
+        nonRoutableStatus = 'PRIVATE_IP';
+        observedEvidence = `Observed IP ${cleanIP} is a multicast address (RFC 5771 / RFC 4291).`;
+        inferredContext = 'Multicast group traffic; excluded from public geolocation lookups.';
       } else if (classification === IP_CLASSIFICATION.RESERVED_IP) {
         country = 'Reserved / Special Network';
         countryCode = 'RES';
@@ -441,6 +488,7 @@ export class GeoLocationService {
         networkType = 'Reserved / Special-Purpose Subnet';
         computedRole = 'RESERVED';
         computedRoleLabel = 'Reserved / Special-Purpose';
+        nonRoutableStatus = 'RESERVED';
         observedEvidence = `IP ${cleanIP} belongs to special-purpose/reserved address space (${classification}).`;
         inferredContext = 'Non-routable reserved network entity; excluded from public geolocation.';
       }
@@ -450,8 +498,8 @@ export class GeoLocationService {
         ipVersion,
         classification,
         sourceHeader: context.sourceHeader || 'Headers',
-        status: 'PRIVATE_IP',
-        lookupStatus: 'PRIVATE_IP',
+        status: nonRoutableStatus,
+        lookupStatus: nonRoutableStatus,
         isPrivate: true,
         geoAvailable: false,
         role: computedRole,
@@ -508,42 +556,45 @@ export class GeoLocationService {
             continue;
           }
 
-          if ((result.country && result.country !== 'Geolocation unavailable') || result.city || typeof result.latitude === 'number') {
-            const lat = sanitizeCoordinate(result.latitude, -90, 90);
-            const lon = sanitizeCoordinate(result.longitude, -180, 180);
+          const sanitizedLat = sanitizeCoordinate(result.latitude, -90, 90);
+          const sanitizedLon = sanitizeCoordinate(result.longitude, -180, 180);
+
+          if ((result.country && result.country !== 'Geolocation unavailable') || result.city || sanitizedLat !== null) {
+            const lat = sanitizedLat;
+            const lon = sanitizedLon;
 
             const record = {
               ip: cleanIP,
               ipVersion,
-              classification,
+              classification: result.classification || classification,
               sourceHeader: context.sourceHeader || 'Headers',
-              status: 'SUCCESS',
-              lookupStatus: 'SUCCESS',
+              status: result.status || 'SUCCESS',
+              lookupStatus: result.lookupStatus || result.status || 'SUCCESS',
               isPrivate: false,
-              geoAvailable: true,
-              role: context.role || 'OBSERVED_IP',
-              roleLabel: context.roleLabel || 'Observed Public IP',
+              geoAvailable: typeof result.geoAvailable === 'boolean' ? result.geoAvailable : (lat !== null && lon !== null),
+              role: context.role || result.role || 'OBSERVED_IP',
+              roleLabel: context.roleLabel || result.roleLabel || 'Observed Public IP',
               country: result.country || 'Unknown Country',
-              countryCode: result.countryCode || '',
-              region: result.region || '',
+              countryCode: result.countryCode || result.country_code || '',
+              region: result.region || result.regionName || '',
               city: result.city || '',
               latitude: lat,
               longitude: lon,
               timezone: result.timezone || '',
-              isp: result.isp || result.asnOrg || 'Unknown ISP',
-              asn: result.asn || 'AS-UNKNOWN',
-              asnOrg: result.asnOrg || result.isp || 'Autonomous System',
+              isp: result.isp || result.asnOrg || result.connection?.isp || 'Unknown ISP',
+              asn: result.asn || result.ASN || (result.connection?.asn ? (String(result.connection.asn).startsWith('AS') ? String(result.connection.asn) : `AS${result.connection.asn}`) : 'AS-UNKNOWN'),
+              asnOrg: result.asnOrg || result.isp || result.connection?.org || 'Autonomous System',
               networkType: result.networkType || 'Standard Transit Infrastructure',
               isProxyOrVpn: Boolean(result.isProxyOrVpn),
               riskLevel: result.riskLevel || (result.isProxyOrVpn ? 'HIGH' : 'LOW'),
-              routingDetails: result.routingDetails || `Observed routing via ${result.asn || 'upstream transit'}`,
+              routingDetails: result.routingDetails || `Observed routing via ${result.asn || result.ASN || 'upstream transit'}`,
               provider: result.provider || provider.name,
               isDemo: Boolean(result.isDemo),
               dataSource: result.dataSource || 'LIVE FORENSIC TELEMETRY',
-              observedEvidence: `Observed IP ${cleanIP} geolocates to ${result.city ? `${result.city}, ` : ''}${result.country || 'Unknown'} (${result.asn || 'Unknown ASN'} - ${result.asnOrg || result.isp || 'Transit'}).`,
-              inferredContext: result.isProxyOrVpn 
+              observedEvidence: result.observedEvidence || `Observed IP ${cleanIP} geolocates to ${result.city ? `${result.city}, ` : ''}${result.country || 'Unknown'} (${result.asn || result.ASN || 'Unknown ASN'} - ${result.asnOrg || result.isp || 'Transit'}).`,
+              inferredContext: result.inferredContext || (result.isProxyOrVpn 
                 ? 'Anonymizing relay / VPN egress infrastructure often leveraged in evasion directives.' 
-                : 'Standard internet transit infrastructure routing.',
+                : 'Standard internet transit infrastructure routing.'),
               disclaimer: GEO_LEGAL_DISCLAIMER
             };
 
